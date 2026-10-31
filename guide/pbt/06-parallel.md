@@ -1,0 +1,67 @@
+# Parallel testing
+
+A system that is correct under sequential use can still break under concurrent use. pbt tests for that with the same commands and model as a sequential test: it generates a sequential prefix followed by branches, runs the branches in goroutines, and then checks whether some interleaving of the branches explains the results that came back.
+
+```go
+// Counter is safe for concurrent use. Every command returns a value the
+// postcondition can check, which is what lets the interleaving check
+// decide whether the concurrent run was explained by some sequential order.
+type Counter struct {
+	mu sync.Mutex
+	n  int
+}
+
+func (c *Counter) Add(d int) int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.n += d
+	return c.n
+}
+
+func TestCounterParallel(t *testing.T) {
+	pbt.Check(t, func(t *pbt.T) {
+		c := &Counter{}
+		n := 0 // the model: what the counter should hold
+		add := pbt.Map(pbt.IntRange(1, 5), func(d int) pbt.Command {
+			return pbt.Command{
+				Name: "add", Args: []any{d},
+				Run:  func(pbt.Env) any { return c.Add(d) },
+				Next: func(pbt.Var) { n += d },
+				Post: func(_ pbt.Env, got any) error {
+					if got != n+d {
+						return fmt.Errorf("add(%d) returned %v, want %d", d, got, n+d)
+					}
+					return nil
+				},
+			}
+		})
+		commands := func() pbt.Gen[pbt.Command] { return add }
+		prog := pbt.ParallelCommands(func() { n = 0 }, commands).Draw(t, "cmds")
+		prog.RunParallel(t)
+	})
+}
+```
+
+`ParallelCommands` takes the same `init` and `gen` as `Commands` and generates programs with two branches of at most six commands each after the prefix. The option `pbt.Branches(n, maxLen)` sets both numbers, with at most three branches and at most twelve commands across them, since the check enumerates interleavings and the count grows fast; `pbt.Length` bounds the prefix. `RunParallel` runs the prefix, then the branches concurrently, and finally searches for an order of the recorded calls and results that satisfies every postcondition in turn. When no order does, the case fails:
+
+```text
+[pbt] error: no interleaving of the 2 branches satisfies the postconditions
+```
+
+preceded by the program and the history of each branch. A command that panics in a branch fails the case as well.
+
+## What the check means
+
+The check keeps the order of the calls within each branch and tries every order between branches. It accepts the run when one of those orders is consistent with the model. That is what PropEr's `parallel_commands` does, and it is weaker than a linearizability check, which would also respect the real-time order in which calls from different branches completed. A system can pass this check and still violate linearizability in ways only a timing-aware checker sees. It does catch the common failures: lost updates, duplicate identifiers, reads of partial state.
+
+Three consequences follow for how you write the commands.
+
+- Every command must return a value that a postcondition can check. A command that returns nothing gives the check nothing to explain.
+- A branch cannot depend on the results of another branch, since neither has run when the program is generated. Each branch resolves its own `Var` values and those of the prefix.
+- The `Run` functions of the branches execute concurrently, so they must not touch the model. `Pre`, `Post` and `Next` run afterwards on the test's goroutine, while pbt replays the model along each candidate order.
+
+## Combine it with the race detector
+
+The interleaving check finds behavior that the model rejects. The race detector finds unsynchronized memory access whether or not it changed a result. Run parallel tests with `go test -race`; the two tools catch different bugs, and a parallel property gives the race detector the concurrent workload it needs.
+
+The `Counter` above holds a mutex. Remove it, and the test reports either duplicated results that no interleaving explains or a data race, depending on the run.

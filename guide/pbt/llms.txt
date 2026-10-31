@@ -1,0 +1,50 @@
+# pbt
+
+> pbt is a property-based testing library for Go with the feature set of Erlang's PropEr: generators whose distribution you control, statistics that check it, stateful and parallel command testing, state machines, targeted search and existential properties. Module path go.ymotongpoo.com/pbt; Apache License 2.0; Go 1.25 or later.
+
+This file indexes the documentation of pbt v0.3.0. Every page of the user guide has a Markdown version at its URL with .md appended, and llms-full.txt holds the whole guide in one file. The package documentation on pkg.go.dev is the reference for every function and option; the repository holds the design notes, the migration guide for rapid users, the changelog and the examples. Stateful tests are written as commands that close over a model and a system kept in the test's variables, with no type parameters; generators are typed, and the type is inferred in nearly every call.
+
+## User guide
+
+- [Getting started](https://go.ymotongpoo.com/pbt/guide/index.md): What a property is, how to install pbt, a first property with ForAll and Check, and what happens when it fails: shrinking, the saved case and the replay.
+- [Generators](https://go.ymotongpoo.com/pbt/guide/01-generators.md): The built-in generators, writing your own with Custom, composing them with Map, Bind, Filter, OneOf and Frequency, reading the draws in a report, and sampling outside a property.
+- [Size, distribution and statistics](https://go.ymotongpoo.com/pbt/guide/02-distribution.md): The size parameter, weights with Frequency, Sized and Resize, the statistics Collect, Classify, Aggregate, Measure and Cover, and CheckCoverage, which turns coverage into a check.
+- [Shrinking](https://go.ymotongpoo.com/pbt/guide/03-shrinking.md): How a failing case shrinks, steering the search with ShrinkTo and IntRangeToward, LetShrink and NoShrink, watching a shrink with SampleShrink, and why the kind of failure stays the same.
+- [Properties and runs](https://go.ymotongpoo.com/pbt/guide/04-properties.md): The options and flags of a run, Assume and discards, Setup and Cleanup, Conjunction, Deadline, OnFail, Recover and NoPanic, and how seeds, saved cases and replay work.
+- [Stateful testing](https://go.ymotongpoo.com/pbt/guide/05-stateful.md): Commands as closures over a model and a system kept in the test's variables, Vars for results that do not exist yet, Commands and RunSequential, reading a stateful failure, and writing good models.
+- [Parallel testing](https://go.ymotongpoo.com/pbt/guide/06-parallel.md): ParallelCommands and RunParallel, what the interleaving check proves and what it does not, and combining it with the race detector.
+- [State machines](https://go.ymotongpoo.com/pbt/guide/07-fsm.md): The fsm package: named states, weighted transitions, state data in the test's variables, and statistics by transition.
+- [Targeted search and existence](https://go.ymotongpoo.com/pbt/guide/08-targeted.md): Maximize and Minimize to steer a run toward a utility, and CheckExists for properties that ask whether a witness exists.
+- [Generators from types](https://go.ymotongpoo.com/pbt/guide/09-types.md): Make and its struct tags, WithType and WithField, generators for recursive types, and pbtgen, which writes generators as source.
+- [Where to go next](https://go.ymotongpoo.com/pbt/guide/10-reference.md): The examples that port the PropEr Testing book, the practical examples, the migration guide for rapid users, the reference material and the flags at a glance.
+
+## Reference
+
+- [Package documentation](https://pkg.go.dev/go.ymotongpoo.com/pbt): every function and option of package pbt, with runnable examples
+- [Package fsm](https://pkg.go.dev/go.ymotongpoo.com/pbt/fsm): state machines with named states and weighted transitions
+- [README](https://raw.githubusercontent.com/ymotongpoo/pbt/main/README.md): what pbt is, a first property and a stateful property
+- [CHANGELOG](https://raw.githubusercontent.com/ymotongpoo/pbt/main/CHANGELOG.md): the changes of each release and how to upgrade
+- [MIGRATION](https://raw.githubusercontent.com/ymotongpoo/pbt/main/MIGRATION.md): rapid's API mapped onto pbt, table by table
+- [DESIGN](https://raw.githubusercontent.com/ymotongpoo/pbt/main/DESIGN.md): the design decisions, the API listing and the comparison with PropEr, QuickCheck, Hypothesis and rapid
+- [Examples](https://github.com/ymotongpoo/pbt/tree/main/examples): the PropEr Testing book ported to Go, and practical stateful tests of an HTTP API, a job queue, a rate limiter, a session store and a ledger
+- [AGENTS.md](https://raw.githubusercontent.com/ymotongpoo/pbt/main/AGENTS.md): instructions for coding agents that work on the repository itself
+
+## 利用ガイド（日本語）
+
+- [はじめに](https://go.ymotongpoo.com/pbt/guide/ja/index.md): プロパティとは何か、pbtのインストール、ForAllとCheckによる最初のプロパティ、そして失敗したときに起きる縮小、ケースの保存、再生。
+- [生成器](https://go.ymotongpoo.com/pbt/guide/ja/01-generators.md): 組み込みの生成器、Customによる自作、Map、Bind、Filter、OneOf、Frequencyによる合成、報告に載る引き値の読み方、プロパティの外での標本抽出。
+- [サイズ、分布、統計](https://go.ymotongpoo.com/pbt/guide/ja/02-distribution.md): サイズパラメータ、Frequencyによる重み、SizedとResize、統計のCollect、Classify、Aggregate、Measure、Cover、そして被覆を検査にするCheckCoverage。
+- [縮小](https://go.ymotongpoo.com/pbt/guide/ja/03-shrinking.md): 失敗したケースが縮小される仕組み、ShrinkToとIntRangeTowardによる誘導、LetShrinkとNoShrink、SampleShrinkによる縮小の観察、失敗の種類が保たれる理由。
+- [プロパティと実行](https://go.ymotongpoo.com/pbt/guide/ja/04-properties.md): 実行のオプションとフラグ、Assumeと破棄、SetupとCleanup、Conjunction、Deadline、OnFail、Recover、NoPanic、シードと保存されたケースと再生の仕組み。
+- [ステートフルテスト](https://go.ymotongpoo.com/pbt/guide/ja/05-stateful.md): テストの変数に置いたモデルとシステムを参照するクロージャとしてのコマンド、まだ存在しない結果を表すVar、CommandsとRunSequential、ステートフルな失敗の読み方、良いモデルの書き方。
+- [並行テスト](https://go.ymotongpoo.com/pbt/guide/ja/06-parallel.md): ParallelCommandsとRunParallel、交互配置の検査が証明することとしないこと、レースディテクターとの併用。
+- [状態機械](https://go.ymotongpoo.com/pbt/guide/ja/07-fsm.md): fsmパッケージ。名前付きの状態、重み付きの遷移、テストの変数に置く状態データ、遷移ごとの統計。
+- [標的型探索と存在性](https://go.ymotongpoo.com/pbt/guide/ja/08-targeted.md): 効用に向けて実行を導くMaximizeとMinimize、証拠が存在するかを問うプロパティのためのCheckExists。
+- [型から導く生成器](https://go.ymotongpoo.com/pbt/guide/ja/09-types.md): Makeと構造体タグ、WithTypeとWithField、再帰的な型の生成器、生成器をソースとして書き出すpbtgen。
+- [次に読むもの](https://go.ymotongpoo.com/pbt/guide/ja/10-reference.md): PropEr Testingの書籍を移植した例題、実践的な例題、rapid利用者向けの移行ガイド、参照資料、フラグの一覧。
+
+## Optional
+
+- [The whole English guide in one file](https://go.ymotongpoo.com/pbt/guide/llms-full.txt)
+- [The whole Japanese guide in one file](https://go.ymotongpoo.com/pbt/guide/ja/llms-full.txt)
+- [DESIGN.ja.md](https://raw.githubusercontent.com/ymotongpoo/pbt/main/DESIGN.ja.md): the design notes in Japanese

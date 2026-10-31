@@ -1,0 +1,1195 @@
+# pbt user guide (v0.3.0)
+
+> The user guide of pbt, a property-based testing library for Go, in one file. The index of the documentation is https://go.ymotongpoo.com/pbt/guide/llms.txt.
+
+---
+
+# Getting started
+
+pbt is a property-based testing library for Go. A property is a test that must hold for every input of some shape. pbt generates the inputs, shrinks a failing one to a small case, and saves that case so that the next `go test` run replays it. The feature set follows Erlang's [PropEr](https://proper-testing.github.io/): generators whose distribution you control, statistics to check that control, stateful and parallel command testing, state machines, targeted search, and existential properties.
+
+This guide describes pbt v0.3.0. It assumes that you write tests with `go test`. The [package documentation](https://pkg.go.dev/go.ymotongpoo.com/pbt) is the reference for every function; the chapters here explain how the pieces fit together and which one to reach for.
+
+## Install
+
+```sh
+go get go.ymotongpoo.com/pbt@v0.3.0
+```
+
+pbt needs Go 1.25 or later and has no dependencies outside the standard library. Import it as `go.ymotongpoo.com/pbt`.
+
+## A first property
+
+A property is a function that receives a `*pbt.T`, draws values from generators, and reports a failure through the methods it shares with `*testing.T`. `pbt.Check` runs it.
+
+```go
+// largest returns the largest element of a non-empty slice.
+func largest(xs []int) int {
+	m := xs[0]
+	for _, x := range xs[1:] {
+		if x > m {
+			m = x
+		}
+	}
+	return m
+}
+
+func TestLargest(t *testing.T) {
+	pbt.Check(t, func(t *pbt.T) {
+		xs := pbt.SliceOfN(pbt.Int(), 1, -1).Draw(t, "xs")
+		if got, want := largest(xs), slices.Max(xs); got != want {
+			t.Fatalf("largest(%v) = %d, want %d", xs, got, want)
+		}
+	})
+}
+```
+
+Three things happen in this test.
+
+- `pbt.SliceOfN(pbt.Int(), 1, -1)` is a generator of slices with at least one element and no upper bound. A generator is a value of type `pbt.Gen[V]`; you can store it in a variable and reuse it.
+- `Draw(t, "xs")` produces one value for the current test case. The label names the value in the report of a failure.
+- `pbt.Check(t, prop)` runs the property 100 times. The size parameter grows from 1 to 42 over the run, so the first cases are small and later ones larger. Chapter 3 explains the size.
+
+`*pbt.T` has `Errorf`, `Fatalf`, `Logf`, `Cleanup` and the other reporting methods of `*testing.T`, so a property reads like an ordinary test. A panic inside the property counts as a failure too.
+
+## When a property fails
+
+The next implementation has a bug: it starts the maximum at 0, which is wrong when every element is negative.
+
+```go
+// biggest starts from 0, which is wrong for a slice of negative numbers.
+func biggest(xs []int) int {
+	m := 0
+	for _, x := range xs {
+		if x > m {
+			m = x
+		}
+	}
+	return m
+}
+
+var biggestProperty = func(t *pbt.T) {
+	xs := pbt.SliceOfN(pbt.Int(), 1, -1).Draw(t, "xs")
+	if got, want := biggest(xs), slices.Max(xs); got != want {
+		t.Fatalf("biggest(%v) = %d, want %d", xs, got, want)
+	}
+}
+```
+
+A run of `pbt.Check(t, biggestProperty)` fails with this report.
+
+```text
+[pbt] property failed after 12 passed checks and 16 shrink steps (size 13)
+[pbt] xs (SliceOfN(Int(), 1, -1)) = []int{-1}
+[pbt] error: biggest([-1]) = 0, want -1
+[pbt] saved to testdata/pbt/TestBiggest/5a0c…; go test replays it until the file is deleted
+[pbt] reproduce: go test -run 'TestBiggest' -pbt.seed=0x1
+```
+
+Read it line by line.
+
+- The first line says how many cases passed before the failure, and how many shrink steps it took to reach the case shown. The failing case was found at size 13.
+- Every value the property drew is listed with its label, its generator and its value. The slice that failed first had 13 elements; the shrinker removed all but one and reduced that one to the smallest negative number. `[-1]` is the smallest input that still fails.
+- The `error:` line is the message passed to `Fatalf`. Log lines, panics and the output of `OnFail` callbacks appear here as well.
+- The case was saved under `testdata/pbt`, in a directory named after the test. The next `go test` replays it before generating anything new, so the bug stays visible until it is fixed, and the file is yours to delete or to keep as a regression case.
+- The last line is the command that reproduces the run, seed included.
+
+## What the rest of the guide covers
+
+The chapters build on each other. Chapters 1 to 4 cover generators, the size and distribution of the data, shrinking, and the options of a run. Chapters 5 to 7 cover stateful testing against a model, parallel execution and state machines. Chapter 8 covers targeted search and existential properties, chapter 9 the generators derived from types, and chapter 10 points to the examples, the migration guide for rapid users and the reference material.
+
+---
+
+# Generators
+
+A generator is a value of type `pbt.Gen[V]`. It knows how to produce a `V` from the choices that pbt records for the current case, and that record is what makes shrinking and replay work. You never build the record yourself: you combine generators and draw from them.
+
+## The built-in generators
+
+| Values | Generators |
+| --- | --- |
+| Integers | `Int`, `IntRange`, `IntMin`, `IntMax`, `IntRangeToward`; `Int32`, `Int64`, `Uint`, `Uint32`, `Uint64`, `Byte` and their `Range` forms; `Integer[I]` and `IntegerRange[I]` for any integer type |
+| Floats | `Float64`, `Float64Range`, `Float32`, `Float32Range` for finite values; `AnyFloat64` adds NaN and the infinities |
+| Text | `Bool`, `Rune`, `String`, `StringN`, `StringOf`, `StringOfN`, `Bytes`, `BytesN` |
+| Collections | `SliceOf`, `SliceOfN`, `SliceOfDistinct`, `SliceOfNDistinct`, `MapOf`, `MapOfN`, `Permutation` |
+| Choice | `Just`, `SampledFrom`, `OneOf`, `Frequency`, `Ptr` |
+| Functions | `Func`, `Func2`, which generate pure functions for properties over callbacks |
+| Anything | `Any`, a bounded mix of common types, and `Make[T]`, which derives a generator from a type (chapter 9) |
+
+Integers lean toward the boundaries of their range and toward small values, because those are where bugs live. Lengths of strings and collections follow the size parameter of the case. A maximum length of `-1` means no bound.
+
+## Building your own
+
+`pbt.Custom` turns a function of `*pbt.T` into a generator. Inside it you draw from other generators, in any order and under any control flow.
+
+```go
+type User struct {
+	Name  string
+	Age   int
+	Email string
+}
+
+// userGen builds a User from smaller generators. Labeled draws inside a
+// generator appear in the report, indented under the value they build.
+var userGen = pbt.Custom("user", func(t *pbt.T) User {
+	name := pbt.StringOfN(pbt.SampledFrom([]rune("abcdefghijklmnopqrstuvwxyz")), 1, 12).Draw(t, "name")
+	return User{
+		Name:  name,
+		Age:   pbt.IntRange(0, 120).Draw(t, "age"),
+		Email: name + "@example.com",
+	}
+})
+```
+
+The name given to `Custom` is how the generator appears in reports. The labels of the draws inside it matter too: a labeled draw inside a generator is listed in the report, indented under the value it helped to build. Unlabeled draws, with `""`, are not listed, which is right for a value that is not interesting on its own.
+
+## Composing generators
+
+Three functions cover most compositions.
+
+```go
+// Map transforms a value, Filter keeps the values that satisfy a predicate,
+// and Bind picks the next generator from a value.
+var (
+	even    = pbt.Map(pbt.IntRange(0, 500), func(n int) int { return 2 * n })
+	nonZero = pbt.Filter(pbt.Int(), func(n int) bool { return n != 0 })
+	matrix  = pbt.Bind(pbt.IntRange(1, 4), func(n int) pbt.Gen[[][]int] {
+		row := pbt.SliceOfN(pbt.Int(), n, n) // every row has the same length
+		return pbt.SliceOfN(row, 1, 4)
+	})
+)
+```
+
+- `Map` applies a function to each value. The result shrinks as the input does.
+- `Filter` discards the values that fail a predicate and draws again. A predicate that rejects most values makes the run slow, and pbt gives up on a case after many rejections. Prefer building the value you want: `IntRange(1, 100)` over `Filter(Int(), positive)`.
+- `Bind` chooses the next generator from a value, which is how one part of a value can depend on another. PropEr calls it `?LET`.
+
+`OneOf` picks one of several generators with equal probability and `Frequency` with weights; chapter 2 covers them. `Ptr` wraps a value in a pointer, with or without `nil`. `Lazy` defers the construction of a generator until it is first drawn from, which is what a recursive generator needs to refer to itself; chapter 9 shows the bounded form.
+
+## Reports show how a value was built
+
+A property that fails on a `User` reports the user and, under it, the labeled parts.
+
+```go
+var displayNameProperty = func(t *pbt.T) {
+	u := userGen.Draw(t, "user")
+	display := strings.ToUpper(u.Name[:1]) + u.Name[1:]
+	if unicode.IsLower(rune(display[0])) {
+		t.Fatalf("display name %q is not capitalized", display)
+	}
+	if len(display) > 8 {
+		t.Fatalf("display name %q is too long for the badge", display)
+	}
+}
+```
+
+```text
+[pbt] property failed after 3 passed checks and 145 shrink steps (size 4)
+[pbt] user (user) = snippets.User{Name:"aaaaaaaaa", Age:0, Email:"aaaaaaaaa@example.com"}
+[pbt]   name (StringOfN(SampledFrom(26 values), 1, 12)) = "aaaaaaaaa"
+[pbt]   age (IntRange(0, 120)) = 0
+[pbt] error: display name "Aaaaaaaaa" is too long for the badge
+[pbt] reproduce: go test -run 'TestDisplayName' -pbt.seed=0x1
+```
+
+The name shrank to the shortest string that still breaks the length check, nine letters of `a`, and the age to 0 because it played no part in the failure. A report lists labeled draws up to three levels deep and cuts each value at 2000 characters; the `ReportDepth` and `ReportLimit` options change both.
+
+## Sampling outside a property
+
+`Example` returns one value of a generator, for a quick look or for a conventional test that needs a plausible input. A seed makes the value stable.
+
+```go
+func TestExample(t *testing.T) {
+	u := userGen.Example(42) // a sample outside any property; the seed fixes it
+	if u.Age < 0 || !strings.HasSuffix(u.Email, "@example.com") {
+		t.Fatalf("unexpected user %+v", u)
+	}
+}
+```
+
+## Values that generators share
+
+`Just(v)` returns the same `v` for every case. When `v` is a slice, a map or a pointer, every case sees the same object, so a property that modifies it changes what later cases and the report see. `SampledFrom(values)` copies the slice but hands out the elements as they are. Draw a fresh value from `Custom` when the property needs to modify it.
+
+---
+
+# Size, distribution and statistics
+
+pbt lets you decide what the data looks like, and gives you the tools to check that it looks the way you intended. Both halves matter: a property that never reaches the interesting states of a system proves nothing about them.
+
+## The size parameter
+
+Every test case runs at a size. `Check` starts at size 1 and raises it by one for each passing case, up to 42, so a run begins with small inputs and ends with large ones. The lengths of strings, slices and maps average the size; the magnitude of integers grows with it too. `t.Size()` returns the size of the current case, and the `Sizes(start, max)` option or the `-pbt.startsize` and `-pbt.maxsize` flags change the range.
+
+`Sized` builds a generator from the size, which is how PropEr's `?SIZED` works, and `Resize` runs a generator at a fixed size. Together they bound a recursive structure.
+
+```go
+// A tree whose depth follows the size parameter: small early cases, larger
+// later ones. Resize fixes the size of a part of a value.
+type Tree struct {
+	Value    int
+	Children []Tree
+}
+
+func tree() pbt.Gen[Tree] {
+	return pbt.Sized(func(size int) pbt.Gen[Tree] {
+		if size <= 1 {
+			return pbt.Map(pbt.Int(), func(v int) Tree { return Tree{Value: v} })
+		}
+		return pbt.Custom("tree", func(t *pbt.T) Tree {
+			child := pbt.Resize(size/2, tree())
+			return Tree{Value: pbt.Int().Draw(t, ""), Children: pbt.SliceOfN(child, 0, 3).Draw(t, "")}
+		})
+	})
+}
+```
+
+Halving the size at every level gives a tree whose depth is at most the logarithm of the size, whatever the branching. `Resize(0, g)` makes collections empty, which is the smallest case of anything built from them.
+
+## Weights
+
+`Frequency` draws one of its alternatives with a probability proportional to its weight.
+
+```go
+type Op struct {
+	Kind string
+	Key  string
+}
+
+// ops reads four times as often as it writes; shrinking moves toward the
+// first alternative, the read.
+var ops = pbt.Frequency(
+	pbt.W(4, pbt.Map(pbt.StringN(1, 3), func(k string) Op { return Op{"get", k} })),
+	pbt.W(1, pbt.Map(pbt.StringN(1, 3), func(k string) Op { return Op{"put", k} })),
+)
+```
+
+Weights only affect generation. Shrinking always moves toward the first alternative, whatever the weights are, so the order of the alternatives is the shrinking priority. An alternative with weight 0 is never generated and is reachable only by shrinking, which is what `ShrinkTo` in chapter 3 is built on. `OneOf` is `Frequency` with equal weights.
+
+## Statistics
+
+Four methods on `*pbt.T` describe the cases of a run. `Check` prints the result when the property passes.
+
+```go
+func TestOperationMix(t *testing.T) {
+	pbt.Check(t, func(t *pbt.T) {
+		batch := pbt.SliceOfN(ops, 1, 20).Draw(t, "batch")
+		writes := 0
+		for _, op := range batch {
+			t.Aggregate(op.Kind) // share of each kind among all operations
+			if op.Kind == "put" {
+				writes++
+			}
+		}
+		t.Classify(writes == 0, "read-only batch") // share of cases
+		t.Measure("batch length", float64(len(batch)))
+		t.Cover(writes > 0, 60, "has a write")
+	}, pbt.CheckCoverage())
+}
+```
+
+- `Classify(cond, label)` counts the cases for which the condition holds, and `Collect(v)` counts the cases by the text of a value. Both report a share of the cases.
+- `Aggregate(values...)` counts samples, several per case, and reports their share of all samples. It is the right call for the names of the commands a stateful test ran.
+- `Measure(name, value)` records a number and reports its minimum, average and maximum.
+
+```text
+[pbt] OK, passed 100 checks (seed 0x1)
+[pbt]  22.0% read-only batch
+[pbt]  81.1% get
+[pbt]  18.9% put
+[pbt] batch length: min 1, avg 12.43, max 20 (100 samples)
+```
+
+The shares confirm the four-to-one weighting, and the length line confirms that batches of the full length occur. `Verbose()` or `-pbt.v` prints the summary even when the property records nothing.
+
+## Checking coverage
+
+`Cover(cond, pct, label)` turns an observation into a requirement: the cases for which `cond` holds must make up at least `pct` percent of all cases. The example above requires a write in 60% of the batches.
+
+The decision is statistical, since a run of 100 cases can miss a 60% share by chance. pbt computes the 99.7% confidence interval of the observed share, the Wilson score interval. The requirement is met when the whole interval lies above `pct`, unmet when it lies below, and undecided while it straddles `pct`. Without the `CheckCoverage` option, `Check` logs a shortfall and passes. With it, `Check` keeps running cases past the configured number, up to twenty times as many, until every requirement is decided. It then fails on a shortfall, and it also fails when a requirement is still undecided, so a pass means that the data supports the share.
+
+```go
+var rareCoverProperty = func(t *pbt.T) {
+	n := pbt.IntRange(0, 999).Draw(t, "n")
+	t.Cover(n%100 == 0, 30, "round hundred") // too rare for a 30% share
+}
+```
+
+```text
+[pbt] insufficient coverage:
+[pbt]   round hundred: 17.6% of 125 cases, required 30.0%
+```
+
+The run stopped after 125 cases, once the interval excluded 30%. The observed share also says something about `IntRange`: 0 is a boundary value, so it occurs far more often than one case in a thousand. Statistics are how you find that out, and `Frequency` or `SampledFrom` are how you change it when a uniform spread is what the property needs.
+
+---
+
+# Shrinking
+
+When a case fails, pbt looks for a simpler case that fails in the same way, and reports that one. The search is automatic for every generator, including the ones you write with `Custom`, `Map` and `Bind`. This chapter explains what "simpler" means, how to steer the search, and what it will not do.
+
+## How a case shrinks
+
+Every value a property draws is a function of a sequence of choices, and pbt records that sequence for each case. The shrinker edits the sequence: it deletes the choices that belong to one draw, lowers numbers, moves a group of choices toward an earlier alternative, reorders elements, and then regenerates the values from the edited sequence. A candidate replaces the current case when the property still fails and the sequence is shorter, or as long and lexicographically smaller. The passes repeat until none of them makes progress or the shrink time, 30 seconds by default, runs out.
+
+Because the shrinker works on choices and not on values, nothing special is needed for a value built by `Map` or `Bind`: the shrinker edits the choices underneath and the function regenerates the value. The direction of the search follows from what each generator does with small choices.
+
+| Generator | Shrinks toward |
+| --- | --- |
+| `Int`, `Float64` and the other numbers | 0, or the bound of the range nearest to 0 |
+| `IntRangeToward(lo, hi, center)` | `center`, from either side |
+| `Bool` | `false` |
+| `String`, `SliceOf`, `MapOf` | fewer elements, then simpler elements |
+| `SampledFrom`, `OneOf`, `Frequency` | the first value or alternative |
+| `Just` | nothing to shrink |
+| `Custom`, `Map`, `Bind` | whatever the draws inside shrink toward |
+
+## Steering the search
+
+Sometimes the simplest value by that table is not the most readable one. A date is easier to think about in 1970 than in the year 0, and an offset of a few minutes is more telling than one of 720. Two generators change the target.
+
+```go
+// year shrinks toward the 1970s, then the 20th century, rather than toward
+// the year 0: the alternatives are tried in order while shrinking and never
+// used while generating.
+var year = pbt.ShrinkTo(pbt.IntRange(0, 9999), pbt.IntRange(1970, 1979), pbt.IntRange(1900, 1999))
+
+// offset shrinks toward 0 from either side instead of toward -720.
+var offset = pbt.IntRangeToward(-720, 840, 0)
+```
+
+`ShrinkTo(g, alts...)` generates from `g` and, when shrinking, tries the alternatives in order. It is the equivalent of PropEr's `?SHRINK`. A property that fails for every year from 1990 on reports 1990, the lowest failing year inside the first alternative that still fails:
+
+```text
+[pbt] year (ShrinkTo(IntRange(0, 9999))) = 1990
+```
+
+`IntRangeToward` makes a range shrink toward a center instead of its lower bound. A property that fails outside ±30 minutes reports 31 or -31.
+
+## Shrinking a composite to one of its parts
+
+A value built from parts normally keeps its shape while the parts shrink: a concatenation of three slices stays a concatenation of three slices. `LetShrink` records one more choice, whether to combine the parts or to return one of them. Generation always combines; shrinking can flip the choice, so the composite shrinks to a single part. PropEr calls this `?LETSHRINK`.
+
+```go
+// A concatenation that can shrink to one of its parts, as PropEr's
+// ?LETSHRINK does; without it, the shrinker could only shorten each part.
+var part = pbt.SliceOf(pbt.IntRange(1, 9))
+
+var concat = pbt.LetShrink([]pbt.Gen[[]int]{part, part, part}, func(parts [][]int) []int {
+	return slices.Concat(parts...)
+})
+```
+
+A property that fails on two or more elements reports `[]int{1, 1}`, with the other two parts gone.
+
+## Keeping a value as it is
+
+`NoShrink` marks a value that the shrinker must leave alone. Use it for opaque tokens and for inputs whose shape is fixed by the system under test, where shrinking would only spend time.
+
+```go
+// A token the system under test treats as opaque; shrinking it would only
+// slow the search down.
+var token = pbt.NoShrink(pbt.StringOfN(pbt.SampledFrom([]rune("0123456789abcdef")), 32, 32))
+```
+
+## Watching a shrink
+
+`SampleShrink` returns the path a value takes when it shrinks, as PropEr's `sampleshrink` does. It is the quickest way to check that a custom generator shrinks toward what you expect.
+
+```go
+func TestSampleShrink(t *testing.T) {
+	var path []int
+	for xs := range pbt.SampleShrink(pbt.SliceOfN(pbt.IntRange(1, 9), 1, 5), 1) {
+		path = append(path, len(xs))
+	}
+	if path[len(path)-1] != 1 {
+		t.Fatalf("the shrink path ended at length %d", path[len(path)-1])
+	}
+}
+```
+
+In a real run, `Verbose()` or `-pbt.v` logs every accepted shrink step with the values it produced.
+
+## The failure stays the same
+
+A case records how it first failed: the line of the assertion, or the type and location of the panic. During shrinking, a candidate is accepted only when it fails in the same way. The rule protects you from a common trap.
+
+```go
+// Two bugs: a panic for large inputs and a wrong answer for the rest. The
+// shrinker keeps the failure it started from, so a panic found at a large
+// input is reported as a panic, at the smallest input that still panics.
+func lookupDiscount(qty int) int {
+	if qty > 1000 {
+		panic("quantity out of range")
+	}
+	if qty > 100 {
+		return 5
+	}
+	return 0
+}
+
+var discountProperty = func(t *pbt.T) {
+	qty := pbt.IntRange(0, 5000).Draw(t, "qty")
+	if d := lookupDiscount(qty); qty > 100 && d != 10 {
+		t.Fatalf("discount for %d units = %d, want 10", qty, d)
+	}
+}
+```
+
+Suppose the first failing case is a quantity of 3000, which panics. Without the rule, the shrinker would lower the quantity past 1000, find that 101 fails the assertion, and report a wrong discount; the panic would be gone from the report. With the rule, the quantity shrinks to 1001 and the report shows the panic. When the first failure is the wrong discount, the case shrinks to 101 instead. Either way, the report describes the bug the run found. A stateful test keys its failures by command and check, so a failing postcondition of one command cannot turn into the panic of another.
+
+## What shrinking will not do
+
+The shrinker reaches a local minimum, not always the global one: it only accepts candidates that are simpler by its own measure, so a smaller case that needs a larger intermediate step stays out of reach. `LetShrink` and `ShrinkTo` exist for the cases where the structure of a value hides the simpler form. The size parameter stays fixed while a case shrinks, and the time budget is 30 seconds per failure; `ShrinkTime` or `-pbt.shrinktime` change it.
+
+---
+
+# Properties and runs
+
+This chapter covers the shape of a run: how many cases, which sizes, how discards are handled, what runs before and after a case, how properties combine, and how a failure is reproduced.
+
+## Options and flags
+
+Every setting has a flag for the whole `go test` run and an option for one `Check` call. Options win over flags.
+
+| Flag | Option | Default | Meaning |
+| --- | --- | --- | --- |
+| `-pbt.checks` | `Checks(n)` | 100 | passing cases required |
+| `-pbt.seed` | `Seed(s)` | random | seed of the run, printed in every report |
+| `-pbt.startsize`, `-pbt.maxsize` | `Sizes(start, max)` | 1, 42 | size of the first case and the size the cases grow to |
+| `-pbt.shrinktime` | `ShrinkTime(d)` | 30s | time budget for shrinking one failure |
+| `-pbt.searchsteps` | `SearchSteps(n)` | 1000 | cases of a targeted search |
+| `-pbt.nosave` | `NoSave()` | false | do not save failing cases |
+| `-pbt.replay` | `ReplayFile(path)` | none | a saved case to replay before searching |
+| `-pbt.v` | `Verbose()` | false | log the summary of a passing run and every shrink step |
+| | `TestdataDir(dir)` | `testdata/pbt` | where failing cases are saved |
+| | `NoReplay()` | false | skip the saved cases |
+| | `Setup(f)` | none | run `f` before every case |
+| | `CheckCoverage()` | false | fail on an unmet or undecided `Cover` requirement |
+| | `ReportLimit(chars)`, `ReportDepth(levels)` | 2000, 3 | size of a reported value and depth of nested draws |
+
+```go
+func TestSortIsIdempotent(t *testing.T) {
+	pbt.Check(t, func(t *pbt.T) {
+		xs := pbt.SliceOf(pbt.Int()).Draw(t, "xs")
+		once := slices.Sorted(slices.Values(xs))
+		twice := slices.Sorted(slices.Values(once))
+		if !slices.Equal(once, twice) {
+			t.Fatalf("sorting twice gave %v, then %v", once, twice)
+		}
+	}, pbt.Checks(500), pbt.Sizes(1, 60))
+}
+
+// MakeCheck turns a property into a test function, for table-driven or
+// generated tests.
+var TestReverseTwice = pbt.MakeCheck(func(t *pbt.T) {
+	xs := pbt.SliceOf(pbt.Rune()).Draw(t, "xs")
+	ys := slices.Clone(xs)
+	slices.Reverse(ys)
+	slices.Reverse(ys)
+	if !slices.Equal(xs, ys) {
+		t.Fatalf("reversing twice changed %v", xs)
+	}
+})
+```
+
+`MakeCheck` wraps a property as a `func(*testing.T)`, which is convenient for a table of properties or for a subtest.
+
+## Discarding cases
+
+`t.Assume(cond)` discards the current case when the condition is false, as PropEr's `?IMPLIES` does. A discarded case counts neither as a pass nor as a failure, and `Check` draws another. `Skip`, `Skipf` and `SkipNow` do the same.
+
+```go
+func TestDivision(t *testing.T) {
+	pbt.Check(t, func(t *pbt.T) {
+		a := pbt.Int().Draw(t, "a")
+		b := pbt.Int().Draw(t, "b")
+		t.Assume(b != 0) // discards the case; too many discards fail the run
+		if (a/b)*b+a%b != a {
+			t.Fatalf("division identity fails for %d / %d", a, b)
+		}
+	})
+}
+```
+
+Discards are a budget. When they exceed ten times the number of checks, the run fails with the reason of the last discard, because a property that discards most of its cases is testing less than it claims. Prefer a generator that produces valid input, `IntMin(1)` over `Assume(b > 0)`, whenever one exists.
+
+## Setup and cleanup
+
+The `Setup` option runs a function before every case. It may return a teardown function, which runs after the case. `t.Cleanup` registers a function from inside the property for the same purpose, and the cleanups run in reverse order after the case, failed or not.
+
+```go
+func TestFileRoundTrip(t *testing.T) {
+	dir := t.TempDir()
+	withFile := pbt.Setup(func(t *pbt.T) func() {
+		path := filepath.Join(dir, "case")
+		t.Cleanup(func() { os.Remove(path) }) // Cleanup runs after the case, latest first
+		return nil                            // or return a teardown function
+	})
+	pbt.Check(t, func(t *pbt.T) {
+		data := pbt.Bytes().Draw(t, "data")
+		path := filepath.Join(dir, "case")
+		if err := os.WriteFile(path, data, 0o644); err != nil {
+			t.Fatal(err)
+		}
+		got, err := os.ReadFile(path)
+		if err != nil || !slices.Equal(got, data) {
+			t.Fatalf("read back %v (%v), want %v", got, err, data)
+		}
+	}, withFile)
+}
+```
+
+## Combining properties
+
+`Conjunction` runs several named properties on the same case and names the ones that fail. `Deadline` fails a case that takes longer than a duration.
+
+```go
+func TestStringProperties(t *testing.T) {
+	// Conjunction runs every sub-property on the same case and names the
+	// ones that fail.
+	pbt.Check(t, pbt.Conjunction(
+		pbt.Named{Name: "upper is idempotent", Prop: func(t *pbt.T) {
+			s := pbt.String().Draw(t, "s")
+			if strings.ToUpper(strings.ToUpper(s)) != strings.ToUpper(s) {
+				t.Fatalf("%q", s)
+			}
+		}},
+		pbt.Named{Name: "fields never contain spaces", Prop: func(t *pbt.T) {
+			s := pbt.String().Draw(t, "s")
+			for _, f := range strings.Fields(s) {
+				if strings.ContainsRune(f, ' ') {
+					t.Fatalf("%q", f)
+				}
+			}
+		}},
+	))
+
+	// Deadline fails a case that takes too long. Go cannot stop a running
+	// function, so the check happens after the property returns.
+	pbt.Check(t, pbt.Deadline(time.Second, func(t *pbt.T) {
+		s := pbt.StringN(0, 100).Draw(t, "s")
+		if strings.Repeat(s, 2) != s+s {
+			t.Fatal("repeat")
+		}
+	}))
+}
+```
+
+A failure of a conjunction names its members:
+
+```text
+[pbt] error: non-empty: empty
+[pbt] error: conjunction: [non-empty] failed
+```
+
+Go cannot interrupt a running function, so `Deadline` checks the elapsed time after the property returns. A property that never returns is caught by `go test -timeout`. `Timeout` is the former name of `Deadline` and still works.
+
+## Explaining a failure
+
+`t.OnFail(f)` registers a function that runs only for the case that is reported, after shrinking. Anything it logs appears in the report, which makes it the place to print the state of the system under test or the intermediate values of a computation, as PropEr's `?WHENFAIL` does.
+
+```go
+func TestOnFail(t *testing.T) {
+	pbt.Check(t, func(t *pbt.T) {
+		xs := pbt.SliceOf(pbt.Int()).Draw(t, "xs")
+		sum := 0
+		t.OnFail(func() { t.Logf("partial sum when it failed: %d", sum) }) // runs only for the reported case
+		for _, x := range xs {
+			sum += x
+		}
+		if len(xs) == 0 && sum != 0 {
+			t.Fatal("impossible")
+		}
+	})
+}
+```
+
+## Panics
+
+A panic inside a property fails the case. The report shows the panic value and the frames of your code, and the shrinker looks for the smallest case that panics at the same place. Two helpers cover the properties that are about panics themselves.
+
+```go
+func mustPositive(n int) int {
+	if n <= 0 {
+		panic("not positive")
+	}
+	return n
+}
+
+func TestPanics(t *testing.T) {
+	// Recover turns a panic into a value for a property to assert on.
+	pbt.Check(t, func(t *pbt.T) {
+		n := pbt.IntMax(0).Draw(t, "n")
+		if p := pbt.Recover(func() { mustPositive(n) }); p == nil {
+			t.Fatalf("mustPositive(%d) did not panic", n)
+		}
+	})
+	// NoPanic generates the arguments of a function from its signature and
+	// fails when a call panics.
+	pbt.Check(t, pbt.NoPanic(strings.Repeat, pbt.WithType(pbt.IntRange(0, 3))))
+}
+```
+
+`Recover` runs a function and returns what it panicked with, or nil, so a property can assert that invalid input panics. `NoPanic` takes a function and generates its arguments with `Make`, which chapter 9 describes; the `WithType` and `WithField` options narrow the arguments.
+
+## Seeds, saved cases and replay
+
+Every report ends with a `reproduce:` line that carries the seed of the run. Passing that seed with `-pbt.seed` repeats the same sequence of cases, including the failing one, on the same version of the code.
+
+The failing case is also saved under `testdata/pbt/<TestName>/<hash>` as a text file with the size, the drawn values as comments, and the choices. Every later `Check` of the same test replays the saved cases before generating new ones and fails if one still fails, so the regression case follows the code into version control. Delete the file to drop the case. Three options adjust this behavior: `NoSave` keeps a run from writing, `NoReplay` skips the saved cases, and `ReplayFile` or `-pbt.replay=FILE` replays one saved file in any test, which is how you hand a case from one test to another or reproduce a failure from a CI log.
+
+---
+
+# Stateful testing
+
+Many bugs only show up after a sequence of operations: a cache that returns a stale value after an eviction, a queue that miscounts after a close. A stateful test describes the operations as commands, keeps a model of what the system should contain, generates sequences of commands against the model, runs them against the real system and checks every result. When a sequence fails, pbt shrinks it to the shortest one that still fails.
+
+## The system under test
+
+The example is a queue that issues ticket numbers and closes them.
+
+```go
+// Queue is the system under test: it issues ticket numbers and closes them.
+type Queue struct {
+	next int
+	open map[int]bool
+}
+
+func NewQueue() *Queue { return &Queue{open: map[int]bool{}} }
+
+func (q *Queue) Issue() int {
+	q.next++
+	q.open[q.next] = true
+	return q.next
+}
+
+var errNotOpen = errors.New("ticket is not open")
+
+func (q *Queue) Close(id int) error {
+	if !q.open[id] {
+		return errNotOpen
+	}
+	delete(q.open, id)
+	return nil
+}
+
+func (q *Queue) Open() int { return len(q.open) }
+```
+
+## The model and the commands
+
+The model is what the test believes about the system. Here it is the list of open tickets. The ticket numbers do not exist while the sequence is generated, because nothing has run yet, so the model holds them as `pbt.Var` values, symbolic names for results. PropEr does the same with `{var, N}`.
+
+The model and the system are variables of the property, and the commands are closures over them: nothing is passed around, and no type parameter appears. The property takes a constructor for the queue, so that the same commands run against the correct queue here and against a buggy one below.
+
+```go
+// ticketQueue is what the commands need from the system under test.
+type ticketQueue interface {
+	Issue() int
+	Close(id int) error
+	Open() int
+}
+
+// queueProperty is the stateful property over a queue. The model is what
+// the test believes about the queue: the tickets that are open, as Vars,
+// because their numbers exist only once Issue has run. The model and the
+// queue are variables of the property, and the commands close over them.
+func queueProperty(newQueue func() ticketQueue) pbt.Property {
+	return func(t *pbt.T) {
+		q := newQueue()
+		var open []pbt.Var
+
+		issue := pbt.Just(pbt.Command{
+			Name: "issue",
+			Run:  func(pbt.Env) any { return q.Issue() },
+			Next: func(v pbt.Var) { open = append(open, v) },
+		})
+		closeTicket := func() pbt.Gen[pbt.Command] {
+			return pbt.Map(pbt.SampledFrom(open), func(v pbt.Var) pbt.Command {
+				return pbt.Command{
+					Name: "close", Args: []any{v},
+					Pre:  func() bool { return slices.Contains(open, v) },
+					Run:  func(env pbt.Env) any { return q.Close(pbt.Resolve[int](env, v)) },
+					Next: func(pbt.Var) { open = slices.DeleteFunc(open, func(o pbt.Var) bool { return o == v }) },
+					Post: func(_ pbt.Env, got any) error {
+						if got != nil {
+							return fmt.Errorf("close failed: %v", got)
+						}
+						return nil
+					},
+				}
+			})
+		}
+		count := pbt.Just(pbt.Command{
+			Name: "open",
+			Run:  func(pbt.Env) any { return q.Open() },
+			Post: func(_ pbt.Env, got any) error {
+				if got != len(open) {
+					return fmt.Errorf("%d open tickets, want %d", got, len(open))
+				}
+				return nil
+			},
+		})
+		// commands chooses the next command from the model: close is only
+		// offered while a ticket is open.
+		commands := func() pbt.Gen[pbt.Command] {
+			if len(open) == 0 {
+				return pbt.OneOf(issue, count)
+			}
+			return pbt.Frequency(pbt.W(3, issue), pbt.W(2, closeTicket()), pbt.W(1, count))
+		}
+		init := func() { open = nil }
+
+		prog := pbt.Commands(init, commands, pbt.ModelState(func() any { return open })).Draw(t, "cmds")
+		prog.RunSequential(t)
+	}
+}
+
+func TestQueue(t *testing.T) {
+	pbt.Check(t, queueProperty(func() ticketQueue { return NewQueue() }))
+}
+```
+
+A command is a `pbt.Command` value, a struct of functions.
+
+- `Name` and `Args` are what the report prints. Put the arguments of the call in `Args`, with the `Var` of a result where the call uses one, so that the report reads like a program.
+- `Pre` says whether the command is allowed in the current state of the model. It is checked when the sequence is generated and again when a shrunk sequence is replayed, so a command whose precondition fails after another command was removed is not a candidate.
+- `Run` performs the call against the system. The `Env` maps every `Var` to the value its command returned, and `pbt.Resolve[T]` reads one with a type.
+- `Next` updates the model for the command. It receives the result as a `Var`, during generation and during execution alike, which keeps the model free of real values and lets the shrinker regenerate the sequence.
+- `Post` checks the real result against the model state before the command. It runs during execution only.
+
+`pbt.Commands(init, gen)` is a generator of programs. `init` puts the model in its initial state, and pbt calls it before every generation and every run, so the variables of the model need no copying: `Next` changes them in place, and a replay starts again from `init`. The function `gen` returns the generator of the next command for the current state of the model, which is where you decide what is possible and how likely it is: `close` is only offered while a ticket is open, and a `Frequency` sets the mix, with `pbt.W` pairing each weight with its generator. The option `pbt.Length(min, max)` bounds the length of the sequence, a generator that returns `pbt.NoCommands()` ends it, and `pbt.ModelState(f)` gives the report a function that shows the model. `RunSequential` executes the program, checks each postcondition, and records the name of every command for the statistics, so a passing run prints how often each command ran.
+
+## Reading a failure
+
+The next queue forgets to remove a closed ticket, so `Open` keeps counting it.
+
+```go
+// leakyQueue forgets to remove a closed ticket, so Open counts it still.
+type leakyQueue struct{ Queue }
+
+func (q *leakyQueue) Close(id int) error {
+	if !q.open[id] {
+		return errNotOpen
+	}
+	q.open[id] = false
+	return nil
+}
+```
+
+The report shows the program, the history of the run and the model state before the step that failed.
+
+```text
+[pbt] property failed after 5 passed checks and 65 shrink steps (size 6)
+[pbt] cmds (Commands) = Program{
+[pbt]     var1 = issue()
+[pbt]     var2 = close(var1)
+[pbt]     var3 = open()
+[pbt]   }
+[pbt] log: history:
+[pbt] log:   1. var1 = issue() -> 1
+[pbt] log:   2. var2 = close(var1) -> <nil>
+[pbt] log:   3. var3 = open() -> 1
+[pbt] log: model state before step 3: []
+[pbt] error: step 3: postcondition of open() failed: 1 open tickets, want 0
+[pbt] reproduce: go test -run 'TestQueue' -pbt.seed=0x1
+```
+
+The first failing sequence had several issues and closes. The shrinker removed commands one by one, re-checking the preconditions each time, until three remained: the shortest program that shows the leak. The failure is keyed by the check and the command, "postcondition of open", so shrinking does not trade it for a different failure.
+
+## Writing good models
+
+- Change the model only in `init` and `Next`; `Pre`, `Post` and `gen` read it. pbt replays a sequence by calling `init` and then the `Next` of every command, so a change made anywhere else is lost on the replay, and a value that `init` forgets to reset leaks from one case into the next.
+- Keep the model simpler than the system. The point is to state what the system should do in terms you can check, not to reimplement it.
+- Choose commands from the state rather than rejecting them with `Pre` alone. A precondition that fails often wastes generated commands; a generator that offers the right commands for a state wastes none. Keep `Pre` as the guard that shrinking needs.
+- Watch the statistics. `RunSequential` records every command name, so a passing run shows whether the mix of commands is the one you intended.
+
+---
+
+# Parallel testing
+
+A system that is correct under sequential use can still break under concurrent use. pbt tests for that with the same commands and model as a sequential test: it generates a sequential prefix followed by branches, runs the branches in goroutines, and then checks whether some interleaving of the branches explains the results that came back.
+
+```go
+// Counter is safe for concurrent use. Every command returns a value the
+// postcondition can check, which is what lets the interleaving check
+// decide whether the concurrent run was explained by some sequential order.
+type Counter struct {
+	mu sync.Mutex
+	n  int
+}
+
+func (c *Counter) Add(d int) int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.n += d
+	return c.n
+}
+
+func TestCounterParallel(t *testing.T) {
+	pbt.Check(t, func(t *pbt.T) {
+		c := &Counter{}
+		n := 0 // the model: what the counter should hold
+		add := pbt.Map(pbt.IntRange(1, 5), func(d int) pbt.Command {
+			return pbt.Command{
+				Name: "add", Args: []any{d},
+				Run:  func(pbt.Env) any { return c.Add(d) },
+				Next: func(pbt.Var) { n += d },
+				Post: func(_ pbt.Env, got any) error {
+					if got != n+d {
+						return fmt.Errorf("add(%d) returned %v, want %d", d, got, n+d)
+					}
+					return nil
+				},
+			}
+		})
+		commands := func() pbt.Gen[pbt.Command] { return add }
+		prog := pbt.ParallelCommands(func() { n = 0 }, commands).Draw(t, "cmds")
+		prog.RunParallel(t)
+	})
+}
+```
+
+`ParallelCommands` takes the same `init` and `gen` as `Commands` and generates programs with two branches of at most six commands each after the prefix. The option `pbt.Branches(n, maxLen)` sets both numbers, with at most three branches and at most twelve commands across them, since the check enumerates interleavings and the count grows fast; `pbt.Length` bounds the prefix. `RunParallel` runs the prefix, then the branches concurrently, and finally searches for an order of the recorded calls and results that satisfies every postcondition in turn. When no order does, the case fails:
+
+```text
+[pbt] error: no interleaving of the 2 branches satisfies the postconditions
+```
+
+preceded by the program and the history of each branch. A command that panics in a branch fails the case as well.
+
+## What the check means
+
+The check keeps the order of the calls within each branch and tries every order between branches. It accepts the run when one of those orders is consistent with the model. That is what PropEr's `parallel_commands` does, and it is weaker than a linearizability check, which would also respect the real-time order in which calls from different branches completed. A system can pass this check and still violate linearizability in ways only a timing-aware checker sees. It does catch the common failures: lost updates, duplicate identifiers, reads of partial state.
+
+Three consequences follow for how you write the commands.
+
+- Every command must return a value that a postcondition can check. A command that returns nothing gives the check nothing to explain.
+- A branch cannot depend on the results of another branch, since neither has run when the program is generated. Each branch resolves its own `Var` values and those of the prefix.
+- The `Run` functions of the branches execute concurrently, so they must not touch the model. `Pre`, `Post` and `Next` run afterwards on the test's goroutine, while pbt replays the model along each candidate order.
+
+## Combine it with the race detector
+
+The interleaving check finds behavior that the model rejects. The race detector finds unsynchronized memory access whether or not it changed a result. Run parallel tests with `go test -race`; the two tools catch different bugs, and a parallel property gives the race detector the concurrent workload it needs.
+
+The `Counter` above holds a mutex. Remove it, and the test reports either duplicated results that no interleaving explains or a data race, depending on the run.
+
+---
+
+# State machines
+
+When a system moves between named states and allows different operations in each, a finite state machine is the natural model. The `fsm` package builds on the command machinery of chapter 5: you name the states and list the transitions out of each one, with weights, and the package generates command sequences that follow the machine. It is the counterpart of PropEr's `proper_fsm`.
+
+## The system
+
+```go
+// Account moves between the states new, verified and locked.
+type Account struct{ state string }
+
+var errState = errors.New("not allowed in this state")
+
+func (a *Account) Verify() error { return a.move("new", "verified") }
+func (a *Account) Lock() error   { return a.move("verified", "locked") }
+func (a *Account) Unlock() error { return a.move("locked", "verified") }
+
+func (a *Account) move(from, to string) error {
+	if a.state != from {
+		return errState
+	}
+	a.state = to
+	return nil
+}
+```
+
+## The machine
+
+A machine is a function from a state name to the transitions available in that state. `fsm.Commands(initial, init, transitions)` takes the name of the first state, a function that puts the state data in its initial state, and that function. The state data, when a machine has some, lives in variables of the property like the model of chapter 5; `init` may be nil when there is none.
+
+```go
+// accountProperty names the states and lists the transitions out of each
+// one. The machine carries no state data here; a machine that needs some
+// keeps it in variables of the property, like the model of chapter 5.
+func accountProperty(t *pbt.T) {
+	a := &Account{state: "new"}
+	expect := func(want error) func(pbt.Env, any) error {
+		return func(_ pbt.Env, got any) error {
+			err, _ := got.(error)
+			if !errors.Is(err, want) {
+				return errors.New("unexpected result")
+			}
+			return nil
+		}
+	}
+	command := func(name string, call func() error, want error) pbt.Gen[pbt.Command] {
+		return pbt.Just(pbt.Command{Name: name, Run: func(pbt.Env) any { return call() }, Post: expect(want)})
+	}
+	transitions := func(state string) []fsm.Transition {
+		switch state {
+		case "new":
+			return []fsm.Transition{
+				{Weight: 3, To: "verified", Cmd: command("verify", a.Verify, nil)},
+				{Weight: 1, To: "new", Cmd: command("lock", a.Lock, errState)},
+			}
+		case "verified":
+			return []fsm.Transition{
+				{Weight: 2, To: "locked", Cmd: command("lock", a.Lock, nil)},
+				{Weight: 1, To: "verified", Cmd: command("verify", a.Verify, errState)},
+			}
+		default: // locked
+			return []fsm.Transition{
+				{Weight: 2, To: "verified", Cmd: command("unlock", a.Unlock, nil)},
+				{Weight: 1, To: "locked", Cmd: command("lock", a.Lock, errState)},
+			}
+		}
+	}
+	prog := fsm.Commands("new", nil, transitions).Draw(t, "cmds")
+	prog.RunSequential(t)
+}
+
+func TestAccountMachine(t *testing.T) {
+	pbt.Check(t, accountProperty)
+}
+```
+
+Each `Transition` has a `Weight`, a target state `To`, and a `Cmd`, a generator of commands. The command's `Pre`, `Next` and `Post` see the state data; the package moves the name. A transition that stays in the same state, like a second `verify` in `verified`, is how a machine tests the operations that must be rejected.
+
+The program runs with `RunSequential` as in chapter 5, and `fsm.ParallelCommands` gives the parallel form of chapter 6. The report shows the state name before the failing step, next to whatever `pbt.ModelState` adds.
+
+## Statistics by state
+
+The commands carry their source and target state, so the summary of a passing run shows which transitions the machine took:
+
+```text
+[pbt] OK, passed 100 checks (seed 0x1)
+[pbt]  32.7% verified -> locked: lock
+[pbt]  31.5% locked -> verified: unlock
+[pbt]  17.2% verified -> verified: verify
+[pbt]  15.1% locked -> locked: lock
+[pbt]   2.8% new -> verified: verify
+[pbt]   0.7% new -> new: lock
+```
+
+The low share of `new` is expected: every sequence leaves that state after one or two commands and never returns. If a state matters and the statistics show that sequences rarely reach it, raise the weights of the transitions that lead there.
+
+---
+
+# Targeted search and existence
+
+Random inputs reach the common states of a system quickly and the rare ones slowly or never. Targeted property-based testing adds a utility function: the property reports how close a case came to something interesting, and pbt searches for cases with a higher utility instead of drawing fresh ones. PropEr calls it `?MAXIMIZE`.
+
+## Maximize
+
+```go
+// A random walk rarely ends far to the right of the origin. Maximize turns
+// the run into a search for walks that do, and the property fails once one
+// gets past 50; without the search, 100 random cases would almost never
+// fail.
+var walkProperty = func(t *pbt.T) {
+	steps := pbt.SliceOf(pbt.SampledFrom([]int{-1, 1})).Draw(t, "steps")
+	pos := 0
+	for _, s := range steps {
+		pos += s
+	}
+	t.Maximize("position", float64(pos))
+	if pos > 50 {
+		t.Fatalf("the walk reached %d", pos)
+	}
+}
+```
+
+A random walk of `n` steps ends about `sqrt(n)` away from the origin, so 100 random walks almost never reach 50. With `t.Maximize("position", pos)`, the run turns into a search once the first case reports a utility. pbt mutates the choices of the best case so far, keeps a mutation when its utility is higher, sometimes keeps a worse one early in the search to escape a local maximum, and occasionally restarts from a fresh case. The search runs for the number of steps set by `SearchSteps` or `-pbt.searchsteps`, 1000 by default, instead of the number of checks.
+
+```text
+[pbt] property failed after 246 passed checks and 1835 shrink steps (size 33)
+[pbt] utility position = 51
+[pbt] steps (SliceOf(SampledFrom(2 values))) = []int{1, 1, 1, 1, …}
+[pbt] error: the walk reached 51
+```
+
+The search found a walk past 50 after 246 cases, and the shrinker then reduced it to 51 steps to the right, the smallest input that fails. When the property passes, the summary reports the best utility seen. `t.Minimize` searches in the other direction. A case has one utility: a second `Maximize` with the same name replaces the value, and one with another name is an error.
+
+Use the search when a property has a notion of "closer": the depth of a tree, the length of a queue, the number of retries, the distance to a boundary. A utility that is flat over most inputs gives the search nothing to climb.
+
+## Existence
+
+`CheckExists` inverts the question: instead of a property that must hold for every case, it looks for one case where the property holds. A case that fails is a rejected candidate, and the first case that passes is the witness, which pbt shrinks and logs.
+
+```go
+// CheckExists succeeds once a case passes: here, a Pythagorean triple. The
+// witness is shrunk and logged.
+func TestATripleExists(t *testing.T) {
+	pbt.CheckExists(t, func(t *pbt.T) {
+		a := pbt.IntRange(1, 50).Draw(t, "a")
+		b := pbt.IntRange(1, 50).Draw(t, "b")
+		c := pbt.IntRange(1, 70).Draw(t, "c")
+		if a*a+b*b != c*c {
+			t.Fail()
+		}
+	}, pbt.Checks(5000))
+}
+```
+
+```text
+[pbt] witness found after 2748 rejected cases and 14 shrink steps (seed 0x83d3334683123f8d) (size 42)
+[pbt] a (IntRange(1, 50)) = 3
+[pbt] b (IntRange(1, 50)) = 4
+[pbt] c (IntRange(1, 70)) = 5
+```
+
+The test fails when no witness turns up within the number of checks. `Maximize` works inside `CheckExists` too: a utility that measures the distance to a passing case guides the search toward one. Nothing is saved under `testdata/pbt` for an existential property, since a witness is not a regression.
+
+---
+
+# Generators from types
+
+Writing a generator for every struct of a program is tedious, and most of the time the type already says what the values look like. pbt derives generators from types in two ways: `Make[T]` at run time through reflection, and `cmd/pbtgen` at development time as Go source.
+
+## Make
+
+```go
+type Order struct {
+	ID       int      `pbt:"min=1"`
+	Items    []string `pbt:"min=1,max=5"`
+	Note     string   `pbt:"-"` // stays zero
+	Placed   time.Time
+	internal int // unexported fields stay zero
+}
+
+var orderGen = pbt.Make[Order](
+	pbt.WithType(pbt.Map(pbt.IntRange(0, 364), func(d int) time.Time {
+		return time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC).AddDate(0, 0, d)
+	})),
+	pbt.WithField[Order]("Items", pbt.SliceOfN(pbt.StringN(1, 8), 1, 5)),
+)
+
+func TestOrders(t *testing.T) {
+	pbt.Check(t, func(t *pbt.T) {
+		o := orderGen.Draw(t, "order")
+		if o.ID < 1 || len(o.Items) == 0 || o.Note != "" || o.Placed.Year() != 2026 {
+			t.Fatalf("unexpected order %+v", o)
+		}
+	})
+}
+```
+
+`Make[T]` builds a generator for `T` from its fields, recursively. A `pbt` struct tag adjusts a field: `min` and `max` bound a number or the length of a string, slice or map, and `-` leaves the field zero. Two options replace generators: `WithType(g)` for every value of a type, which is how `time.Time` gets a generator above, and `WithField[S](name, g)` for one field of a struct.
+
+Some types need help. Unexported fields stay zero, because reflection cannot set them, so a type whose state is all unexported needs `WithType`. Interfaces, channels and functions have no derivable generator and need `WithType` or `WithField` as well; `Make` panics with the field name when one is missing.
+
+`NoPanic` from chapter 4 uses `Make` for the arguments of the function it tests, and accepts the same options.
+
+## Recursive types
+
+A type that contains itself has no finite generator unless something bounds the recursion. `Recursive` gives a leaf generator and a function that extends a generator by one level; the size parameter bounds how many levels a value gets, so a value has about `size` nodes.
+
+```go
+// Expr is a recursive type. Recursive bounds the depth with the size
+// parameter, so a value has about size nodes instead of growing without end.
+type Expr struct {
+	Num  int
+	Op   string
+	Args []Expr
+}
+
+var exprGen = pbt.Recursive(
+	pbt.Map(pbt.IntRange(0, 9), func(n int) Expr { return Expr{Num: n} }),
+	func(self pbt.Gen[Expr]) pbt.Gen[Expr] {
+		return pbt.Custom("op", func(t *pbt.T) Expr {
+			return Expr{Op: pbt.SampledFrom([]string{"+", "*"}).Draw(t, ""), Args: pbt.SliceOfN(self, 2, 2).Draw(t, "")}
+		})
+	},
+)
+
+func size(e Expr) int {
+	n := 1
+	for _, a := range e.Args {
+		n += size(a)
+	}
+	return n
+}
+
+func TestExprSize(t *testing.T) {
+	pbt.Check(t, func(t *pbt.T) {
+		e := exprGen.Draw(t, "expr")
+		if size(e) > 4*t.Size()+8 {
+			t.Fatalf("%d nodes at size %d", size(e), t.Size())
+		}
+	})
+}
+```
+
+`Bounded(leaf, node)` is the lower-level form: it keeps one recursion budget per value, shared by every bounded generator drawn while that value is built, which is what two mutually recursive types need. `Make` applies the same budget to recursive structs, so a self-referential struct does not grow without end.
+
+## pbtgen
+
+`cmd/pbtgen` writes the generators as source, which the compiler checks and which can set unexported fields because the generated file lives in the package itself.
+
+```text
+//go:generate go run go.ymotongpoo.com/pbt/cmd/pbtgen -type Order,Customer
+```
+
+For each type `T`, `go generate` writes a function `GenT` returning `pbt.Gen[T]` into `pbt_gen.go`. The struct tags of `Make` apply, and a `gen=EXPR` tag names a Go expression to use as the generator of a field, such as a variable of type `pbt.Gen[string]` in the same package. Recursive types, including mutually recursive ones, are generated through `Bounded`.
+
+Three flags adjust the output. `-output` names the file. `-prefix` replaces `Gen` in the function names, and pbtgen refuses to write a name that the package already declares, so a hand-written generator is never overwritten. pbtgen reads the files that `go build` would compile on the current platform, so files excluded by build constraints do not affect the generated code.
+
+Choose `Make` when the type changes often or the generator is needed in one test; choose pbtgen when the generator is part of the package's test support, when unexported fields matter, or when a compile error is preferable to a panic at test time.
+
+---
+
+# Where to go next
+
+## The examples
+
+The `examples` module of the repository ports every chapter of the book [PropEr Testing](https://propertesting.com/) by Fred Hebert to Go. The book is the best long-form introduction to the way of thinking behind pbt, and the ports show how each of its Erlang examples reads in Go.
+
+| Book chapter | Package | Shows |
+| --- | --- | --- |
+| 1 to 4 | `ch01cash`, `ch04stateless` | first properties, modeling, the exercises on lists |
+| 5 | `ch05generators` | custom generators, `Collect` and `Aggregate`, recursive and `Sized` generators |
+| 6 | `ch06birthday` | a CSV round trip, templates, example tests next to properties |
+| 7 | `ch07checkout` | layered `Bind`, negative tests, discovering a specification bug |
+| 8 | `ch08shrinking` | `ShrinkTo`, `LetShrink`, `SampleShrink` |
+| 9 | `ch09cache` | a sequential and a parallel stateful test of a cache |
+| 10 | `ch10bookstore` | a stateful test against a database, with SQLite and PostgreSQL |
+| 11 | `ch11breaker` | a state machine with the `fsm` package |
+
+Each package has a README that answers the exercises of its chapter. Run them with `go test ./...` inside `examples`.
+
+## Practical examples
+
+The `examples/practical` directory tests small but realistic systems the way a project would: through their public API, against a model, with a planted bug whose report the tests check. The examples build on chapters 5 to 7.
+
+| Package | System | Shows |
+| --- | --- | --- |
+| `httpapi` | a REST API with optimistic concurrency, served by `httptest` | server-assigned ids as `Var`s, status codes as postconditions, a parallel run against a server that allocates ids outside its lock |
+| `jobqueue` | a worker queue with leases, a visibility timeout and dead letters | a fake clock advanced by a command, stale leases kept in the model, an ack that does not check its lease |
+| `ratelimit` | a sliding-window limiter per client | the rule "at most N requests in any window" as the model, a sweep that forgets clients too early |
+| `sessions` | a session store with expiry, refresh and logout | the `fsm` package with state data and a clock, time as a transition split by where it leads |
+| `ledger` | transfers between accounts | a model next to an audit that checks only the invariants, an overdraft race caught in parallel |
+
+Run `go test -v -run Caught ./practical/...` inside `examples` to read the reports of the planted bugs. The README of the directory describes the patterns the examples share.
+
+## Coming from rapid
+
+[MIGRATION.md](https://github.com/ymotongpoo/pbt/blob/main/MIGRATION.md) maps rapid's API onto pbt, table by table, and lists what pbt adds. Most rapid tests translate line by line; the stateful tests change shape, because pbt generates the whole sequence against the model before running it. [BENCHMARK.md](https://github.com/ymotongpoo/pbt/blob/main/BENCHMARK.md) compares the two libraries on the same properties.
+
+## Reference material
+
+- The [package documentation](https://pkg.go.dev/go.ymotongpoo.com/pbt) on pkg.go.dev describes every function and option, with runnable examples.
+- [DESIGN.md](https://github.com/ymotongpoo/pbt/blob/main/DESIGN.md) records the design decisions and the comparison with PropEr, QuickCheck, Hypothesis and rapid, with a Japanese version in DESIGN.ja.md.
+- [CHANGELOG.md](https://github.com/ymotongpoo/pbt/blob/main/CHANGELOG.md) lists the changes of each release. The API may still change before v1.0.
+- Issues and questions go to the [GitHub repository](https://github.com/ymotongpoo/pbt).
+
+## Flags at a glance
+
+```text
+go test ./... -pbt.checks=1000          # more cases
+go test ./... -pbt.seed=0x1c3           # repeat a run
+go test ./... -pbt.startsize=10 -pbt.maxsize=100
+go test ./... -pbt.shrinktime=2m
+go test ./... -pbt.searchsteps=5000     # longer targeted searches
+go test ./... -pbt.nosave               # keep testdata/pbt untouched
+go test ./... -pbt.replay=testdata/pbt/TestQueue/3f2a… -run TestQueue
+go test ./... -pbt.v                    # summaries and shrink steps
+```

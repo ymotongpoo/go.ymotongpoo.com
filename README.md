@@ -14,7 +14,7 @@ The site serves the `go-import` meta tags, which let `go get` resolve
   and rewrites every other path under `/pbt` to the module page with status
   200, so `/pbt/fsm?go-get=1` and `/pbt?go-get=1` return the same tags.
   Rules take precedence over static assets and the first match wins, so the
-  guide's rules come first. Destinations must be clean URLs (`/goimport/pbt/`,
+  exact paths come first and the `/pbt/*` catch-all last. Destinations must be clean URLs (`/goimport/pbt/`,
   not `/goimport/pbt/index.html`): wrangler drops a rule whose destination
   names an `index.html` or `.html` file as an infinite loop, and the asset
   server answers such a destination with a 308 to the clean URL.
@@ -23,13 +23,24 @@ The site serves the `go-import` meta tags, which let `go get` resolve
   human visitors. It lives outside `/pbt` because a rule cannot rewrite
   `/pbt/*` to a file under `/pbt`. `pbt/index.html` is a copy, kept as the
   static fallback for `/pbt/`; change both together.
+- `_headers`: serves the Markdown version of every guide page and the
+  `llms.txt` files as `text/markdown`, adds a `Link` header with
+  `rel="describedby"` that points every guide page at `/pbt/llms.txt`, and a
+  `Content-Signal` of `search=yes, ai-input=yes` on the guide. Header rules
+  match the request path, so the rules name `/pbt/...` paths and `/*.md`.
 - `guide/pbt/`: the rendered guide. Do not edit it here: the sources are
   `docs/guide` on `main`, and `cd site && go run . -version vX.Y.Z
   -analytics G-EC4QPYV95Y` renders them into `site/public`, which is copied
   to `guide/pbt`. The `-analytics` flag is the Google Analytics measurement
   ID of go.ymotongpoo.com; without it the pages carry no tag. Pages are served
   at clean URLs (`/pbt/guide/01-generators`), and the links inside them
-  are relative and extensionless.
+  are relative and extensionless. Next to every page is its Markdown version
+  (`01-generators.md`, `index.md` for the first page), announced by a
+  `<link rel="alternate" type="text/markdown">` in the page. `llms.txt`, the
+  index of the documentation for AI agents in the format of
+  <https://llmstxt.org/>, and `llms-full.txt`, the whole guide in one file
+  per language, are rendered too and served at `/llms.txt`, `/pbt/llms.txt`
+  and `/pbt/guide/llms.txt` by the redirect rules.
 - `404.html`: served with status 404 for unknown paths. Without it, Pages
   would serve the root `index.html` with status 200 for every unknown path.
 - `index.html`: a plain index page for the root. It carries no `go-import` tag
