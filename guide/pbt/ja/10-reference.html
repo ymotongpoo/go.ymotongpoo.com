@@ -132,16 +132,55 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 </tbody>
 </table>
 <p>各パッケージのREADMEに、その章の演習への解答があります。<code>examples</code> の中で <code>go test ./...</code> を実行してください。</p>
+<h2 id="heading-2">実践的な例題</h2>
+<p><code>examples/practical</code> には、小さいながら現実的なシステムを、プロジェクトでテストするのと同じやり方で検査する例題があります。公開APIを通して操作し、結果をモデルと比べ、仕込んだバグの報告をテストで確かめています。5章から7章の内容を前提にしています。</p>
+<table>
+<thead>
+<tr>
+<th>パッケージ</th>
+<th>対象</th>
+<th>見せること</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>httpapi</code></td>
+<td><code>httptest</code> で動かす、楽観的並行制御つきのREST API</td>
+<td>サーバーが採番したIDを <code>Var</code> で持つこと、ステータスコードを事後条件にすること、ロックの外でIDを採番するサーバーに対する並行実行</td>
+</tr>
+<tr>
+<td><code>jobqueue</code></td>
+<td>リース、可視性タイムアウト、デッドレターを持つワーカーキュー</td>
+<td>コマンドで進める擬似時計、失効したリースをモデルに残すこと、リースを確かめないack</td>
+</tr>
+<tr>
+<td><code>ratelimit</code></td>
+<td>クライアントごとのスライディングウィンドウ制限</td>
+<td>「どの窓でもN件まで」という規則そのものをモデルにすること、クライアントを早く忘れすぎる掃除</td>
+</tr>
+<tr>
+<td><code>sessions</code></td>
+<td>失効、更新、ログアウトのあるセッションストア</td>
+<td>状態データと時計を伴う <code>fsm</code> パッケージ、行き先で分けた時間経過の遷移</td>
+</tr>
+<tr>
+<td><code>ledger</code></td>
+<td>口座間の送金</td>
+<td>結果を予測するモデルと不変条件だけを確かめる監査の併用、並行実行で捕まえる残高超過の競合</td>
+</tr>
+</tbody>
+</table>
+<p><code>examples</code> の中で <code>go test -v -run Caught ./practical/...</code> を実行すると、仕込んだバグの報告を読めます。例題に共通する書き方は、このディレクトリのREADMEに書いてあります。</p>
 <h2 id="rapid">rapidから移行する</h2>
 <p><a href="https://github.com/ymotongpoo/pbt/blob/main/MIGRATION.md">MIGRATION.md</a> は、rapidのAPIをpbtに表で対応づけ、pbtが加えるものを列挙しています。rapidのテストの大半は1行ずつ置き換えられます。ステートフルテストは形が変わります。pbtは列全体をモデルに対して生成してから実行するためです。<a href="https://github.com/ymotongpoo/pbt/blob/main/BENCHMARK.md">BENCHMARK.md</a> は同じプロパティで両者を比較しています。</p>
-<h2 id="heading-2">参照資料</h2>
+<h2 id="heading-3">参照資料</h2>
 <ul>
 <li>pkg.go.devの<a href="https://pkg.go.dev/go.ymotongpoo.com/pbt">パッケージドキュメント</a>は、すべての関数とオプションを、実行できる例とともに説明しています。</li>
 <li><a href="https://github.com/ymotongpoo/pbt/blob/main/DESIGN.md">DESIGN.md</a> は設計の判断と、PropEr、QuickCheck、Hypothesis、rapidとの比較を記録しています。日本語版はDESIGN.ja.mdです。</li>
 <li><a href="https://github.com/ymotongpoo/pbt/blob/main/CHANGELOG.md">CHANGELOG.md</a> は各リリースの変更を列挙しています。v1.0まではAPIが変わることがあります。</li>
 <li>不具合の報告と質問は<a href="https://github.com/ymotongpoo/pbt">GitHubリポジトリ</a>へお願いします。</li>
 </ul>
-<h2 id="heading-3">フラグの一覧</h2>
+<h2 id="heading-4">フラグの一覧</h2>
 <pre style="background-color:#f7f7f7;-webkit-text-size-adjust:none;"><code><span style="display:flex;"><span>go test ./... -pbt.checks=1000          # ケース数を増やす
 </span></span><span style="display:flex;"><span>go test ./... -pbt.seed=0x1c3           # 実行を繰り返す
 </span></span><span style="display:flex;"><span>go test ./... -pbt.startsize=10 -pbt.maxsize=100

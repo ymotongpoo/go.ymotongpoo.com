@@ -123,6 +123,45 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 </tbody>
 </table>
 <p>Each package has a README that answers the exercises of its chapter. Run them with <code>go test ./...</code> inside <code>examples</code>.</p>
+<h2 id="practical-examples">Practical examples</h2>
+<p>The <code>examples/practical</code> directory tests small but realistic systems the way a project would: through their public API, against a model, with a planted bug whose report the tests check. The examples build on chapters 5 to 7.</p>
+<table>
+<thead>
+<tr>
+<th>Package</th>
+<th>System</th>
+<th>Shows</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>httpapi</code></td>
+<td>a REST API with optimistic concurrency, served by <code>httptest</code></td>
+<td>server-assigned ids as <code>Var</code>s, status codes as postconditions, a parallel run against a server that allocates ids outside its lock</td>
+</tr>
+<tr>
+<td><code>jobqueue</code></td>
+<td>a worker queue with leases, a visibility timeout and dead letters</td>
+<td>a fake clock advanced by a command, stale leases kept in the model, an ack that does not check its lease</td>
+</tr>
+<tr>
+<td><code>ratelimit</code></td>
+<td>a sliding-window limiter per client</td>
+<td>the rule &quot;at most N requests in any window&quot; as the model, a sweep that forgets clients too early</td>
+</tr>
+<tr>
+<td><code>sessions</code></td>
+<td>a session store with expiry, refresh and logout</td>
+<td>the <code>fsm</code> package with state data and a clock, time as a transition split by where it leads</td>
+</tr>
+<tr>
+<td><code>ledger</code></td>
+<td>transfers between accounts</td>
+<td>a model next to an audit that checks only the invariants, an overdraft race caught in parallel</td>
+</tr>
+</tbody>
+</table>
+<p>Run <code>go test -v -run Caught ./practical/...</code> inside <code>examples</code> to read the reports of the planted bugs. The README of the directory describes the patterns the examples share.</p>
 <h2 id="coming-from-rapid">Coming from rapid</h2>
 <p><a href="https://github.com/ymotongpoo/pbt/blob/main/MIGRATION.md">MIGRATION.md</a> maps rapid's API onto pbt, table by table, and lists what pbt adds. Most rapid tests translate line by line; the stateful tests change shape, because pbt generates the whole sequence against the model before running it. <a href="https://github.com/ymotongpoo/pbt/blob/main/BENCHMARK.md">BENCHMARK.md</a> compares the two libraries on the same properties.</p>
 <h2 id="reference-material">Reference material</h2>
