@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>はじめに · pbt 利用ガイド</title>
+<link rel="canonical" href="https://go.ymotongpoo.com/pbt/guide/ja/index.html">
+<style>
+:root { --fg: #1f2328; --muted: #59636e; --line: #d1d9e0; --accent: #0969da; --bg: #fff; --code: #f6f8fa; }
+* { box-sizing: border-box; }
+body { margin: 0; color: var(--fg); background: var(--bg); font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, "Hiragino Sans", "Noto Sans JP", sans-serif; }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+.layout { display: grid; grid-template-columns: 16rem minmax(0, 1fr); min-height: 100vh; }
+nav.side { border-right: 1px solid var(--line); padding: 1.5rem 1rem; font-size: 0.92rem; }
+nav.side h1 { font-size: 1rem; margin: 0 0 0.25rem; }
+nav.side .version { color: var(--muted); font-size: 0.8rem; margin-bottom: 1rem; }
+nav.side ol { list-style: none; padding: 0; margin: 0; }
+nav.side li { margin: 0.2rem 0; }
+nav.side li.current a { font-weight: 600; color: var(--fg); }
+nav.side .lang { margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--line); }
+main { padding: 2rem 3rem 4rem; max-width: 52rem; }
+main h1 { font-size: 1.9rem; line-height: 1.25; margin-top: 0; }
+main h2 { font-size: 1.35rem; margin-top: 2.2rem; border-bottom: 1px solid var(--line); padding-bottom: 0.2rem; }
+main h3 { font-size: 1.1rem; margin-top: 1.6rem; }
+code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.88em; }
+p code, li code, td code { background: var(--code); padding: 0.1em 0.3em; border-radius: 4px; }
+pre { background: var(--code) !important; padding: 0.9rem 1rem; border-radius: 6px; overflow-x: auto; line-height: 1.5; }
+table { border-collapse: collapse; margin: 1rem 0; font-size: 0.92rem; }
+th, td { border: 1px solid var(--line); padding: 0.35rem 0.6rem; text-align: left; vertical-align: top; }
+th { background: var(--code); }
+blockquote { margin: 1rem 0; padding: 0.2rem 1rem; border-left: 4px solid var(--line); color: var(--muted); }
+.pager { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--line); gap: 1rem; }
+footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
+@media (max-width: 760px) {
+  .layout { grid-template-columns: 1fr; }
+  nav.side { border-right: 0; border-bottom: 1px solid var(--line); }
+  main { padding: 1.5rem 1.2rem 3rem; }
+}
+</style>
+</head>
+<body>
+<div class="layout">
+<nav class="side">
+<h1><a href="index.html">pbt 利用ガイド</a></h1>
+<div class="version">pbt v0.2.0</div>
+<ol>
+<li class="current"><a href="index.html">はじめに</a></li>
+<li><a href="01-generators.html">生成器</a></li>
+<li><a href="02-distribution.html">サイズ、分布、統計</a></li>
+<li><a href="03-shrinking.html">縮小</a></li>
+<li><a href="04-properties.html">プロパティと実行</a></li>
+<li><a href="05-stateful.html">ステートフルテスト</a></li>
+<li><a href="06-parallel.html">並行テスト</a></li>
+<li><a href="07-fsm.html">状態機械</a></li>
+<li><a href="08-targeted.html">標的型探索と存在性</a></li>
+<li><a href="09-types.html">型から導く生成器</a></li>
+<li><a href="10-reference.html">次に読むもの</a></li>
+</ol>
+<div class="lang"><a href="../index.html">English</a></div>
+<div class="lang"><a href="https://pkg.go.dev/go.ymotongpoo.com/pbt">pkg.go.dev</a> · <a href="https://github.com/ymotongpoo/pbt">GitHub</a></div>
+</nav>
+<main>
+<h1 id="heading">はじめに</h1>
+<p>pbtはGo向けのプロパティベーステストライブラリです。プロパティとは、ある形をしたすべての入力について成り立つべきテストのことです。pbtは入力を生成し、失敗した入力を小さなケースへ縮小し、そのケースを保存して、次の <code>go test</code> の実行で再現します。機能の範囲はErlangの<a href="https://proper-testing.github.io/">PropEr</a>に合わせています。分布を利用者が制御できる生成器、その制御を確かめる統計、モデルに対するステートフルテストと並行テスト、状態機械、標的型探索、存在性のプロパティです。</p>
+<p>このガイドはpbt v0.2.0を対象にしています。<code>go test</code> でテストを書いていることを前提にしています。関数ごとの説明は<a href="https://pkg.go.dev/go.ymotongpoo.com/pbt">パッケージドキュメント</a>にあります。ここでは、部品どうしがどう組み合わさるか、どの場面でどれを使うかを説明します。</p>
+<h2 id="heading-1">インストール</h2>
+<pre style="background-color:#f7f7f7;-webkit-text-size-adjust:none;"><code><span style="display:flex;"><span>go get go.ymotongpoo.com/pbt@v0.2.0
+</span></span></code></pre><p>pbtはGo 1.25以降で動き、標準ライブラリ以外に依存しません。<code>go.ymotongpoo.com/pbt</code> としてimportします。</p>
+<h2 id="heading-2">最初のプロパティ</h2>
+<p>プロパティは <code>*pbt.T</code> を受け取る関数です。生成器から値を取り出し、<code>*testing.T</code> と共通のメソッドで失敗を報告します。それを <code>pbt.Check</code> が実行します。</p>
+<pre style="background-color:#f7f7f7;-webkit-text-size-adjust:none;"><code><span style="display:flex;"><span><span style="color:#57606a">// largest returns the largest element of a non-empty slice.</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#cf222e">func</span><span style="color:#fff"> </span><span style="color:#6639ba">largest</span><span style="color:#1f2328">(</span><span style="color:#1f2328">xs</span><span style="color:#fff"> </span><span style="color:#1f2328">[]</span><span style="color:#cf222e">int</span><span style="color:#1f2328">)</span><span style="color:#fff"> </span><span style="color:#cf222e">int</span><span style="color:#fff"> </span><span style="color:#1f2328">{</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#1f2328">m</span><span style="color:#fff"> </span><span style="color:#0550ae">:=</span><span style="color:#fff"> </span><span style="color:#1f2328">xs</span><span style="color:#1f2328">[</span><span style="color:#0550ae">0</span><span style="color:#1f2328">]</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#cf222e">for</span><span style="color:#fff"> </span><span style="color:#1f2328">_</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#1f2328">x</span><span style="color:#fff"> </span><span style="color:#0550ae">:=</span><span style="color:#fff"> </span><span style="color:#cf222e">range</span><span style="color:#fff"> </span><span style="color:#1f2328">xs</span><span style="color:#1f2328">[</span><span style="color:#0550ae">1</span><span style="color:#1f2328">:]</span><span style="color:#fff"> </span><span style="color:#1f2328">{</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">		</span><span style="color:#cf222e">if</span><span style="color:#fff"> </span><span style="color:#1f2328">x</span><span style="color:#fff"> </span><span style="color:#1f2328">&gt;</span><span style="color:#fff"> </span><span style="color:#1f2328">m</span><span style="color:#fff"> </span><span style="color:#1f2328">{</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">			</span><span style="color:#1f2328">m</span><span style="color:#fff"> </span><span style="color:#1f2328">=</span><span style="color:#fff"> </span><span style="color:#1f2328">x</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">		</span><span style="color:#1f2328">}</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#1f2328">}</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#cf222e">return</span><span style="color:#fff"> </span><span style="color:#1f2328">m</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#1f2328">}</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#cf222e">func</span><span style="color:#fff"> </span><span style="color:#6639ba">TestLargest</span><span style="color:#1f2328">(</span><span style="color:#1f2328">t</span><span style="color:#fff"> </span><span style="color:#0550ae">*</span><span style="color:#1f2328">testing</span><span style="color:#1f2328">.</span><span style="color:#1f2328">T</span><span style="color:#1f2328">)</span><span style="color:#fff"> </span><span style="color:#1f2328">{</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#6639ba">Check</span><span style="color:#1f2328">(</span><span style="color:#1f2328">t</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#cf222e">func</span><span style="color:#1f2328">(</span><span style="color:#1f2328">t</span><span style="color:#fff"> </span><span style="color:#0550ae">*</span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#1f2328">T</span><span style="color:#1f2328">)</span><span style="color:#fff"> </span><span style="color:#1f2328">{</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">		</span><span style="color:#1f2328">xs</span><span style="color:#fff"> </span><span style="color:#0550ae">:=</span><span style="color:#fff"> </span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#6639ba">SliceOfN</span><span style="color:#1f2328">(</span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#6639ba">Int</span><span style="color:#1f2328">(),</span><span style="color:#fff"> </span><span style="color:#0550ae">1</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#0550ae">-</span><span style="color:#0550ae">1</span><span style="color:#1f2328">).</span><span style="color:#6639ba">Draw</span><span style="color:#1f2328">(</span><span style="color:#1f2328">t</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#0a3069">&#34;xs&#34;</span><span style="color:#1f2328">)</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">		</span><span style="color:#cf222e">if</span><span style="color:#fff"> </span><span style="color:#1f2328">got</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#1f2328">want</span><span style="color:#fff"> </span><span style="color:#0550ae">:=</span><span style="color:#fff"> </span><span style="color:#6639ba">largest</span><span style="color:#1f2328">(</span><span style="color:#1f2328">xs</span><span style="color:#1f2328">),</span><span style="color:#fff"> </span><span style="color:#1f2328">slices</span><span style="color:#1f2328">.</span><span style="color:#6639ba">Max</span><span style="color:#1f2328">(</span><span style="color:#1f2328">xs</span><span style="color:#1f2328">);</span><span style="color:#fff"> </span><span style="color:#1f2328">got</span><span style="color:#fff"> </span><span style="color:#0550ae">!=</span><span style="color:#fff"> </span><span style="color:#1f2328">want</span><span style="color:#fff"> </span><span style="color:#1f2328">{</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">			</span><span style="color:#1f2328">t</span><span style="color:#1f2328">.</span><span style="color:#6639ba">Fatalf</span><span style="color:#1f2328">(</span><span style="color:#0a3069">&#34;largest(%v) = %d, want %d&#34;</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#1f2328">xs</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#1f2328">got</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#1f2328">want</span><span style="color:#1f2328">)</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">		</span><span style="color:#1f2328">}</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#1f2328">})</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#1f2328">}</span><span style="color:#fff">
+</span></span></span></code></pre><p>このテストでは3つのことが起きています。<code>pbt.SliceOfN(pbt.Int(), 1, -1)</code> は、要素が1つ以上で上限のないスライスの生成器です。生成器は <code>pbt.Gen[V]</code> 型の値なので、変数に入れて使い回せます。<code>Draw(t, &quot;xs&quot;)</code> は、現在のテストケースの値を1つ作ります。ラベルは、失敗の報告でその値を指す名前になります。<code>pbt.Check(t, prop)</code> はプロパティを100回実行します。サイズパラメーターは実行の間に1から42まで増えるので、最初のケースは小さく、後のケースほど大きくなります。サイズは3章で説明します。</p>
+<p><code>*pbt.T</code> には <code>Errorf</code>、<code>Fatalf</code>、<code>Logf</code>、<code>Cleanup</code> など <code>*testing.T</code> の報告用メソッドがあるので、プロパティは普通のテストと同じように読めます。プロパティの中で起きたパニックも失敗として扱われます。</p>
+<h2 id="heading-3">プロパティが失敗したとき</h2>
+<p>次の実装にはバグがあります。最大値を0から始めているので、要素がすべて負のときに間違います。</p>
+<pre style="background-color:#f7f7f7;-webkit-text-size-adjust:none;"><code><span style="display:flex;"><span><span style="color:#57606a">// biggest starts from 0, which is wrong for a slice of negative numbers.</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#cf222e">func</span><span style="color:#fff"> </span><span style="color:#6639ba">biggest</span><span style="color:#1f2328">(</span><span style="color:#1f2328">xs</span><span style="color:#fff"> </span><span style="color:#1f2328">[]</span><span style="color:#cf222e">int</span><span style="color:#1f2328">)</span><span style="color:#fff"> </span><span style="color:#cf222e">int</span><span style="color:#fff"> </span><span style="color:#1f2328">{</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#1f2328">m</span><span style="color:#fff"> </span><span style="color:#0550ae">:=</span><span style="color:#fff"> </span><span style="color:#0550ae">0</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#cf222e">for</span><span style="color:#fff"> </span><span style="color:#1f2328">_</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#1f2328">x</span><span style="color:#fff"> </span><span style="color:#0550ae">:=</span><span style="color:#fff"> </span><span style="color:#cf222e">range</span><span style="color:#fff"> </span><span style="color:#1f2328">xs</span><span style="color:#fff"> </span><span style="color:#1f2328">{</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">		</span><span style="color:#cf222e">if</span><span style="color:#fff"> </span><span style="color:#1f2328">x</span><span style="color:#fff"> </span><span style="color:#1f2328">&gt;</span><span style="color:#fff"> </span><span style="color:#1f2328">m</span><span style="color:#fff"> </span><span style="color:#1f2328">{</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">			</span><span style="color:#1f2328">m</span><span style="color:#fff"> </span><span style="color:#1f2328">=</span><span style="color:#fff"> </span><span style="color:#1f2328">x</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">		</span><span style="color:#1f2328">}</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#1f2328">}</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#cf222e">return</span><span style="color:#fff"> </span><span style="color:#1f2328">m</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#1f2328">}</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#cf222e">var</span><span style="color:#fff"> </span><span style="color:#1f2328">biggestProperty</span><span style="color:#fff"> </span><span style="color:#1f2328">=</span><span style="color:#fff"> </span><span style="color:#cf222e">func</span><span style="color:#1f2328">(</span><span style="color:#1f2328">t</span><span style="color:#fff"> </span><span style="color:#0550ae">*</span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#1f2328">T</span><span style="color:#1f2328">)</span><span style="color:#fff"> </span><span style="color:#1f2328">{</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#1f2328">xs</span><span style="color:#fff"> </span><span style="color:#0550ae">:=</span><span style="color:#fff"> </span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#6639ba">SliceOfN</span><span style="color:#1f2328">(</span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#6639ba">Int</span><span style="color:#1f2328">(),</span><span style="color:#fff"> </span><span style="color:#0550ae">1</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#0550ae">-</span><span style="color:#0550ae">1</span><span style="color:#1f2328">).</span><span style="color:#6639ba">Draw</span><span style="color:#1f2328">(</span><span style="color:#1f2328">t</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#0a3069">&#34;xs&#34;</span><span style="color:#1f2328">)</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#cf222e">if</span><span style="color:#fff"> </span><span style="color:#1f2328">got</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#1f2328">want</span><span style="color:#fff"> </span><span style="color:#0550ae">:=</span><span style="color:#fff"> </span><span style="color:#6639ba">biggest</span><span style="color:#1f2328">(</span><span style="color:#1f2328">xs</span><span style="color:#1f2328">),</span><span style="color:#fff"> </span><span style="color:#1f2328">slices</span><span style="color:#1f2328">.</span><span style="color:#6639ba">Max</span><span style="color:#1f2328">(</span><span style="color:#1f2328">xs</span><span style="color:#1f2328">);</span><span style="color:#fff"> </span><span style="color:#1f2328">got</span><span style="color:#fff"> </span><span style="color:#0550ae">!=</span><span style="color:#fff"> </span><span style="color:#1f2328">want</span><span style="color:#fff"> </span><span style="color:#1f2328">{</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">		</span><span style="color:#1f2328">t</span><span style="color:#1f2328">.</span><span style="color:#6639ba">Fatalf</span><span style="color:#1f2328">(</span><span style="color:#0a3069">&#34;biggest(%v) = %d, want %d&#34;</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#1f2328">xs</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#1f2328">got</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#1f2328">want</span><span style="color:#1f2328">)</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#1f2328">}</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#1f2328">}</span><span style="color:#fff">
+</span></span></span></code></pre><p><code>pbt.Check(t, biggestProperty)</code> を実行すると、次の報告が出ます。</p>
+<pre style="background-color:#f7f7f7;-webkit-text-size-adjust:none;"><code><span style="display:flex;"><span>[pbt] property failed after 12 passed checks and 16 shrink steps (size 13)
+</span></span><span style="display:flex;"><span>[pbt] xs (SliceOfN(Int(), 1, -1)) = []int{-1}
+</span></span><span style="display:flex;"><span>[pbt] error: biggest([-1]) = 0, want -1
+</span></span><span style="display:flex;"><span>[pbt] saved to testdata/pbt/TestBiggest/5a0c…; go test replays it until the file is deleted
+</span></span><span style="display:flex;"><span>[pbt] reproduce: go test -run &#39;TestBiggest&#39; -pbt.seed=0x1
+</span></span></code></pre><p>1行ずつ読んでみましょう。</p>
+<p>1行目は、失敗までに通過したケースの数と、表示しているケースに至るまでの縮小のステップ数です。失敗したケースはサイズ13で見つかりました。</p>
+<p>次に、プロパティが取り出した値が、ラベル、生成器、値の順にすべて並びます。最初に失敗したスライスには13個の要素がありました。縮小器がそれを1個にまで減らし、その1個を最小の負の数にしました。<code>[-1]</code> が、まだ失敗する最小の入力です。</p>
+<p><code>error:</code> の行は <code>Fatalf</code> に渡したメッセージです。ログの行、パニック、<code>OnFail</code> のコールバックの出力もここに並びます。</p>
+<p>このケースは <code>testdata/pbt</code> の下の、テスト名のディレクトリに保存されました。次の <code>go test</code> は新しいケースを生成する前にこれを再実行するので、直すまでバグは見え続けます。ファイルは削除しても、回帰テストとして残してもかまいません。最後の行は、シードを含めて同じ実行を再現するコマンドです。</p>
+<h2 id="heading-4">このガイドの構成</h2>
+<p>各章は前の章の内容を前提にしています。1章から4章は、生成器、データのサイズと分布、縮小、実行のオプションを扱います。5章から7章は、モデルに対するステートフルテスト、並行実行、状態機械を扱います。8章は標的型探索と存在性のプロパティ、9章は型から導く生成器です。10章では、例題の移植、rapidからの移行ガイド、参照資料を案内します。</p>
+
+<div class="pager">
+<span></span>
+<span><a href="01-generators.html">生成器</a> →</span>
+</div>
+<footer>pbt 利用ガイド for pbt v0.2.0 · <a href="https://github.com/ymotongpoo/pbt/tree/main/docs/guide">source</a> · Apache License 2.0</footer>
+</main>
+</div>
+</body>
+</html>

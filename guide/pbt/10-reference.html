@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Where to go next · pbt user guide</title>
+<link rel="canonical" href="https://go.ymotongpoo.com/pbt/guide/10-reference.html">
+<style>
+:root { --fg: #1f2328; --muted: #59636e; --line: #d1d9e0; --accent: #0969da; --bg: #fff; --code: #f6f8fa; }
+* { box-sizing: border-box; }
+body { margin: 0; color: var(--fg); background: var(--bg); font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, "Hiragino Sans", "Noto Sans JP", sans-serif; }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+.layout { display: grid; grid-template-columns: 16rem minmax(0, 1fr); min-height: 100vh; }
+nav.side { border-right: 1px solid var(--line); padding: 1.5rem 1rem; font-size: 0.92rem; }
+nav.side h1 { font-size: 1rem; margin: 0 0 0.25rem; }
+nav.side .version { color: var(--muted); font-size: 0.8rem; margin-bottom: 1rem; }
+nav.side ol { list-style: none; padding: 0; margin: 0; }
+nav.side li { margin: 0.2rem 0; }
+nav.side li.current a { font-weight: 600; color: var(--fg); }
+nav.side .lang { margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--line); }
+main { padding: 2rem 3rem 4rem; max-width: 52rem; }
+main h1 { font-size: 1.9rem; line-height: 1.25; margin-top: 0; }
+main h2 { font-size: 1.35rem; margin-top: 2.2rem; border-bottom: 1px solid var(--line); padding-bottom: 0.2rem; }
+main h3 { font-size: 1.1rem; margin-top: 1.6rem; }
+code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.88em; }
+p code, li code, td code { background: var(--code); padding: 0.1em 0.3em; border-radius: 4px; }
+pre { background: var(--code) !important; padding: 0.9rem 1rem; border-radius: 6px; overflow-x: auto; line-height: 1.5; }
+table { border-collapse: collapse; margin: 1rem 0; font-size: 0.92rem; }
+th, td { border: 1px solid var(--line); padding: 0.35rem 0.6rem; text-align: left; vertical-align: top; }
+th { background: var(--code); }
+blockquote { margin: 1rem 0; padding: 0.2rem 1rem; border-left: 4px solid var(--line); color: var(--muted); }
+.pager { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--line); gap: 1rem; }
+footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
+@media (max-width: 760px) {
+  .layout { grid-template-columns: 1fr; }
+  nav.side { border-right: 0; border-bottom: 1px solid var(--line); }
+  main { padding: 1.5rem 1.2rem 3rem; }
+}
+</style>
+</head>
+<body>
+<div class="layout">
+<nav class="side">
+<h1><a href="index.html">pbt user guide</a></h1>
+<div class="version">pbt v0.2.0</div>
+<ol>
+<li><a href="index.html">Getting started</a></li>
+<li><a href="01-generators.html">Generators</a></li>
+<li><a href="02-distribution.html">Size, distribution and statistics</a></li>
+<li><a href="03-shrinking.html">Shrinking</a></li>
+<li><a href="04-properties.html">Properties and runs</a></li>
+<li><a href="05-stateful.html">Stateful testing</a></li>
+<li><a href="06-parallel.html">Parallel testing</a></li>
+<li><a href="07-fsm.html">State machines</a></li>
+<li><a href="08-targeted.html">Targeted search and existence</a></li>
+<li><a href="09-types.html">Generators from types</a></li>
+<li class="current"><a href="10-reference.html">Where to go next</a></li>
+</ol>
+<div class="lang"><a href="ja/10-reference.html">日本語</a></div>
+<div class="lang"><a href="https://pkg.go.dev/go.ymotongpoo.com/pbt">pkg.go.dev</a> · <a href="https://github.com/ymotongpoo/pbt">GitHub</a></div>
+</nav>
+<main>
+<h1 id="where-to-go-next">Where to go next</h1>
+<h2 id="the-examples">The examples</h2>
+<p>The <code>examples</code> module of the repository ports every chapter of the book <a href="https://propertesting.com/">PropEr Testing</a> by Fred Hebert to Go. The book is the best long-form introduction to the way of thinking behind pbt, and the ports show how each of its Erlang examples reads in Go.</p>
+<table>
+<thead>
+<tr>
+<th>Book chapter</th>
+<th>Package</th>
+<th>Shows</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1, 4</td>
+<td><code>ch01cash</code>, <code>ch04stateless</code></td>
+<td>first properties, modeling, the exercises on lists</td>
+</tr>
+<tr>
+<td>5</td>
+<td><code>ch05generators</code></td>
+<td>custom generators, <code>Collect</code> and <code>Aggregate</code>, recursive and <code>Sized</code> generators</td>
+</tr>
+<tr>
+<td>6</td>
+<td><code>ch06birthday</code></td>
+<td>a CSV round trip, templates, example tests next to properties</td>
+</tr>
+<tr>
+<td>7</td>
+<td><code>ch07checkout</code></td>
+<td>layered <code>Bind</code>, negative tests, discovering a specification bug</td>
+</tr>
+<tr>
+<td>8</td>
+<td><code>ch08shrinking</code></td>
+<td><code>ShrinkTo</code>, <code>LetShrink</code>, <code>SampleShrink</code></td>
+</tr>
+<tr>
+<td>9</td>
+<td><code>ch09cache</code></td>
+<td>a sequential and a parallel stateful test of a cache</td>
+</tr>
+<tr>
+<td>10</td>
+<td><code>ch10bookstore</code></td>
+<td>a stateful test against a database, with SQLite and PostgreSQL</td>
+</tr>
+<tr>
+<td>11</td>
+<td><code>ch11breaker</code></td>
+<td>a state machine with the <code>fsm</code> package</td>
+</tr>
+</tbody>
+</table>
+<p>Each package has a README that answers the exercises of its chapter. Run them with <code>go test ./...</code> inside <code>examples</code>.</p>
+<h2 id="coming-from-rapid">Coming from rapid</h2>
+<p><a href="https://github.com/ymotongpoo/pbt/blob/main/MIGRATION.md">MIGRATION.md</a> maps rapid's API onto pbt, table by table, and lists what pbt adds. Most rapid tests translate line by line; the stateful tests change shape, because pbt generates the whole sequence against the model before running it. <a href="https://github.com/ymotongpoo/pbt/blob/main/BENCHMARK.md">BENCHMARK.md</a> compares the two libraries on the same properties.</p>
+<h2 id="reference-material">Reference material</h2>
+<ul>
+<li>The <a href="https://pkg.go.dev/go.ymotongpoo.com/pbt">package documentation</a> on pkg.go.dev describes every function and option, with runnable examples.</li>
+<li><a href="https://github.com/ymotongpoo/pbt/blob/main/DESIGN.md">DESIGN.md</a> records the design decisions and the comparison with PropEr, QuickCheck, Hypothesis and rapid, with a Japanese version in DESIGN.ja.md.</li>
+<li><a href="https://github.com/ymotongpoo/pbt/blob/main/CHANGELOG.md">CHANGELOG.md</a> lists the changes of each release. The API may still change before v1.0.</li>
+<li>Issues and questions go to the <a href="https://github.com/ymotongpoo/pbt">GitHub repository</a>.</li>
+</ul>
+<h2 id="flags-at-a-glance">Flags at a glance</h2>
+<pre style="background-color:#f7f7f7;-webkit-text-size-adjust:none;"><code><span style="display:flex;"><span>go test ./... -pbt.checks=1000          # more cases
+</span></span><span style="display:flex;"><span>go test ./... -pbt.seed=0x1c3           # repeat a run
+</span></span><span style="display:flex;"><span>go test ./... -pbt.startsize=10 -pbt.maxsize=100
+</span></span><span style="display:flex;"><span>go test ./... -pbt.shrinktime=2m
+</span></span><span style="display:flex;"><span>go test ./... -pbt.searchsteps=5000     # longer targeted searches
+</span></span><span style="display:flex;"><span>go test ./... -pbt.nosave               # keep testdata/pbt untouched
+</span></span><span style="display:flex;"><span>go test ./... -pbt.replay=testdata/pbt/TestQueue/3f2a… -run TestQueue
+</span></span><span style="display:flex;"><span>go test ./... -pbt.v                    # summaries and shrink steps
+</span></span></code></pre>
+<div class="pager">
+<span>← <a href="09-types.html">Generators from types</a></span>
+<span></span>
+</div>
+<footer>pbt user guide for pbt v0.2.0 · <a href="https://github.com/ymotongpoo/pbt/tree/main/docs/guide">source</a> · Apache License 2.0</footer>
+</main>
+</div>
+</body>
+</html>

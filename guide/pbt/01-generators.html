@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Generators · pbt user guide</title>
+<link rel="canonical" href="https://go.ymotongpoo.com/pbt/guide/01-generators.html">
+<style>
+:root { --fg: #1f2328; --muted: #59636e; --line: #d1d9e0; --accent: #0969da; --bg: #fff; --code: #f6f8fa; }
+* { box-sizing: border-box; }
+body { margin: 0; color: var(--fg); background: var(--bg); font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, "Hiragino Sans", "Noto Sans JP", sans-serif; }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+.layout { display: grid; grid-template-columns: 16rem minmax(0, 1fr); min-height: 100vh; }
+nav.side { border-right: 1px solid var(--line); padding: 1.5rem 1rem; font-size: 0.92rem; }
+nav.side h1 { font-size: 1rem; margin: 0 0 0.25rem; }
+nav.side .version { color: var(--muted); font-size: 0.8rem; margin-bottom: 1rem; }
+nav.side ol { list-style: none; padding: 0; margin: 0; }
+nav.side li { margin: 0.2rem 0; }
+nav.side li.current a { font-weight: 600; color: var(--fg); }
+nav.side .lang { margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--line); }
+main { padding: 2rem 3rem 4rem; max-width: 52rem; }
+main h1 { font-size: 1.9rem; line-height: 1.25; margin-top: 0; }
+main h2 { font-size: 1.35rem; margin-top: 2.2rem; border-bottom: 1px solid var(--line); padding-bottom: 0.2rem; }
+main h3 { font-size: 1.1rem; margin-top: 1.6rem; }
+code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.88em; }
+p code, li code, td code { background: var(--code); padding: 0.1em 0.3em; border-radius: 4px; }
+pre { background: var(--code) !important; padding: 0.9rem 1rem; border-radius: 6px; overflow-x: auto; line-height: 1.5; }
+table { border-collapse: collapse; margin: 1rem 0; font-size: 0.92rem; }
+th, td { border: 1px solid var(--line); padding: 0.35rem 0.6rem; text-align: left; vertical-align: top; }
+th { background: var(--code); }
+blockquote { margin: 1rem 0; padding: 0.2rem 1rem; border-left: 4px solid var(--line); color: var(--muted); }
+.pager { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--line); gap: 1rem; }
+footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
+@media (max-width: 760px) {
+  .layout { grid-template-columns: 1fr; }
+  nav.side { border-right: 0; border-bottom: 1px solid var(--line); }
+  main { padding: 1.5rem 1.2rem 3rem; }
+}
+</style>
+</head>
+<body>
+<div class="layout">
+<nav class="side">
+<h1><a href="index.html">pbt user guide</a></h1>
+<div class="version">pbt v0.2.0</div>
+<ol>
+<li><a href="index.html">Getting started</a></li>
+<li class="current"><a href="01-generators.html">Generators</a></li>
+<li><a href="02-distribution.html">Size, distribution and statistics</a></li>
+<li><a href="03-shrinking.html">Shrinking</a></li>
+<li><a href="04-properties.html">Properties and runs</a></li>
+<li><a href="05-stateful.html">Stateful testing</a></li>
+<li><a href="06-parallel.html">Parallel testing</a></li>
+<li><a href="07-fsm.html">State machines</a></li>
+<li><a href="08-targeted.html">Targeted search and existence</a></li>
+<li><a href="09-types.html">Generators from types</a></li>
+<li><a href="10-reference.html">Where to go next</a></li>
+</ol>
+<div class="lang"><a href="ja/01-generators.html">日本語</a></div>
+<div class="lang"><a href="https://pkg.go.dev/go.ymotongpoo.com/pbt">pkg.go.dev</a> · <a href="https://github.com/ymotongpoo/pbt">GitHub</a></div>
+</nav>
+<main>
+<h1 id="generators">Generators</h1>
+<p>A generator is a value of type <code>pbt.Gen[V]</code>. It knows how to produce a <code>V</code> from the choices that pbt records for the current case, and that record is what makes shrinking and replay work. You never build the record yourself: you combine generators and draw from them.</p>
+<h2 id="the-built-in-generators">The built-in generators</h2>
+<table>
+<thead>
+<tr>
+<th>Values</th>
+<th>Generators</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Integers</td>
+<td><code>Int</code>, <code>IntRange</code>, <code>IntMin</code>, <code>IntMax</code>, <code>IntRangeToward</code>; <code>Int32</code>, <code>Int64</code>, <code>Uint</code>, <code>Uint32</code>, <code>Uint64</code>, <code>Byte</code> and their <code>Range</code> forms; <code>Integer[I]</code> and <code>IntegerRange[I]</code> for any integer type</td>
+</tr>
+<tr>
+<td>Floats</td>
+<td><code>Float64</code>, <code>Float64Range</code>, <code>Float32</code>, <code>Float32Range</code> for finite values; <code>AnyFloat64</code> adds NaN and the infinities</td>
+</tr>
+<tr>
+<td>Text</td>
+<td><code>Bool</code>, <code>Rune</code>, <code>String</code>, <code>StringN</code>, <code>StringOf</code>, <code>StringOfN</code>, <code>Bytes</code>, <code>BytesN</code></td>
+</tr>
+<tr>
+<td>Collections</td>
+<td><code>SliceOf</code>, <code>SliceOfN</code>, <code>SliceOfDistinct</code>, <code>SliceOfNDistinct</code>, <code>MapOf</code>, <code>MapOfN</code>, <code>Permutation</code></td>
+</tr>
+<tr>
+<td>Choice</td>
+<td><code>Just</code>, <code>SampledFrom</code>, <code>OneOf</code>, <code>Frequency</code>, <code>Ptr</code></td>
+</tr>
+<tr>
+<td>Functions</td>
+<td><code>Func</code>, <code>Func2</code>, which generate pure functions for properties over callbacks</td>
+</tr>
+<tr>
+<td>Anything</td>
+<td><code>Any</code>, a bounded mix of common types, and <code>Make[T]</code>, which derives a generator from a type (chapter 9)</td>
+</tr>
+</tbody>
+</table>
+<p>Integers lean toward the boundaries of their range and toward small values, because those are where bugs live. Lengths of strings and collections follow the size parameter of the case. A maximum length of <code>-1</code> means no bound.</p>
+<h2 id="building-your-own">Building your own</h2>
+<p><code>pbt.Custom</code> turns a function of <code>*pbt.T</code> into a generator. Inside it you draw from other generators, in any order and under any control flow.</p>
+<pre style="background-color:#f7f7f7;-webkit-text-size-adjust:none;"><code><span style="display:flex;"><span><span style="color:#cf222e">type</span><span style="color:#fff"> </span><span style="color:#1f2328">User</span><span style="color:#fff"> </span><span style="color:#cf222e">struct</span><span style="color:#fff"> </span><span style="color:#1f2328">{</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#1f2328">Name</span><span style="color:#fff">  </span><span style="color:#cf222e">string</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#1f2328">Age</span><span style="color:#fff">   </span><span style="color:#cf222e">int</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#1f2328">Email</span><span style="color:#fff"> </span><span style="color:#cf222e">string</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#1f2328">}</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#57606a">// userGen builds a User from smaller generators. Labeled draws inside a</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#57606a">// generator appear in the report, indented under the value they build.</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#cf222e">var</span><span style="color:#fff"> </span><span style="color:#1f2328">userGen</span><span style="color:#fff"> </span><span style="color:#1f2328">=</span><span style="color:#fff"> </span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#6639ba">Custom</span><span style="color:#1f2328">(</span><span style="color:#0a3069">&#34;user&#34;</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#cf222e">func</span><span style="color:#1f2328">(</span><span style="color:#1f2328">t</span><span style="color:#fff"> </span><span style="color:#0550ae">*</span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#1f2328">T</span><span style="color:#1f2328">)</span><span style="color:#fff"> </span><span style="color:#1f2328">User</span><span style="color:#fff"> </span><span style="color:#1f2328">{</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#1f2328">name</span><span style="color:#fff"> </span><span style="color:#0550ae">:=</span><span style="color:#fff"> </span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#6639ba">StringOfN</span><span style="color:#1f2328">(</span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#6639ba">SampledFrom</span><span style="color:#1f2328">([]</span><span style="color:#6639ba">rune</span><span style="color:#1f2328">(</span><span style="color:#0a3069">&#34;abcdefghijklmnopqrstuvwxyz&#34;</span><span style="color:#1f2328">)),</span><span style="color:#fff"> </span><span style="color:#0550ae">1</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#0550ae">12</span><span style="color:#1f2328">).</span><span style="color:#6639ba">Draw</span><span style="color:#1f2328">(</span><span style="color:#1f2328">t</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#0a3069">&#34;name&#34;</span><span style="color:#1f2328">)</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#cf222e">return</span><span style="color:#fff"> </span><span style="color:#1f2328">User</span><span style="color:#1f2328">{</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">		</span><span style="color:#1f2328">Name</span><span style="color:#1f2328">:</span><span style="color:#fff">  </span><span style="color:#1f2328">name</span><span style="color:#1f2328">,</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">		</span><span style="color:#1f2328">Age</span><span style="color:#1f2328">:</span><span style="color:#fff">   </span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#6639ba">IntRange</span><span style="color:#1f2328">(</span><span style="color:#0550ae">0</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#0550ae">120</span><span style="color:#1f2328">).</span><span style="color:#6639ba">Draw</span><span style="color:#1f2328">(</span><span style="color:#1f2328">t</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#0a3069">&#34;age&#34;</span><span style="color:#1f2328">),</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">		</span><span style="color:#1f2328">Email</span><span style="color:#1f2328">:</span><span style="color:#fff"> </span><span style="color:#1f2328">name</span><span style="color:#fff"> </span><span style="color:#0550ae">+</span><span style="color:#fff"> </span><span style="color:#0a3069">&#34;@example.com&#34;</span><span style="color:#1f2328">,</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#1f2328">}</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#1f2328">})</span><span style="color:#fff">
+</span></span></span></code></pre><p>The name given to <code>Custom</code> is how the generator appears in reports. The labels of the draws inside it matter too: a labeled draw inside a generator is listed in the report, indented under the value it helped to build. Unlabeled draws, with <code>&quot;&quot;</code>, are not listed, which is right for a value that is not interesting on its own.</p>
+<h2 id="composing-generators">Composing generators</h2>
+<p>Three functions cover most compositions.</p>
+<pre style="background-color:#f7f7f7;-webkit-text-size-adjust:none;"><code><span style="display:flex;"><span><span style="color:#57606a">// Map transforms a value, Filter keeps the values that satisfy a predicate,</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#57606a">// and Bind picks the next generator from a value.</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#cf222e">var</span><span style="color:#fff"> </span><span style="color:#1f2328">(</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#1f2328">even</span><span style="color:#fff">    </span><span style="color:#1f2328">=</span><span style="color:#fff"> </span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#6639ba">Map</span><span style="color:#1f2328">(</span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#6639ba">IntRange</span><span style="color:#1f2328">(</span><span style="color:#0550ae">0</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#0550ae">500</span><span style="color:#1f2328">),</span><span style="color:#fff"> </span><span style="color:#cf222e">func</span><span style="color:#1f2328">(</span><span style="color:#1f2328">n</span><span style="color:#fff"> </span><span style="color:#cf222e">int</span><span style="color:#1f2328">)</span><span style="color:#fff"> </span><span style="color:#cf222e">int</span><span style="color:#fff"> </span><span style="color:#1f2328">{</span><span style="color:#fff"> </span><span style="color:#cf222e">return</span><span style="color:#fff"> </span><span style="color:#0550ae">2</span><span style="color:#fff"> </span><span style="color:#0550ae">*</span><span style="color:#fff"> </span><span style="color:#1f2328">n</span><span style="color:#fff"> </span><span style="color:#1f2328">})</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#1f2328">nonZero</span><span style="color:#fff"> </span><span style="color:#1f2328">=</span><span style="color:#fff"> </span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#6639ba">Filter</span><span style="color:#1f2328">(</span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#6639ba">Int</span><span style="color:#1f2328">(),</span><span style="color:#fff"> </span><span style="color:#cf222e">func</span><span style="color:#1f2328">(</span><span style="color:#1f2328">n</span><span style="color:#fff"> </span><span style="color:#cf222e">int</span><span style="color:#1f2328">)</span><span style="color:#fff"> </span><span style="color:#cf222e">bool</span><span style="color:#fff"> </span><span style="color:#1f2328">{</span><span style="color:#fff"> </span><span style="color:#cf222e">return</span><span style="color:#fff"> </span><span style="color:#1f2328">n</span><span style="color:#fff"> </span><span style="color:#0550ae">!=</span><span style="color:#fff"> </span><span style="color:#0550ae">0</span><span style="color:#fff"> </span><span style="color:#1f2328">})</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#1f2328">matrix</span><span style="color:#fff">  </span><span style="color:#1f2328">=</span><span style="color:#fff"> </span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#6639ba">Bind</span><span style="color:#1f2328">(</span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#6639ba">IntRange</span><span style="color:#1f2328">(</span><span style="color:#0550ae">1</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#0550ae">4</span><span style="color:#1f2328">),</span><span style="color:#fff"> </span><span style="color:#cf222e">func</span><span style="color:#1f2328">(</span><span style="color:#1f2328">n</span><span style="color:#fff"> </span><span style="color:#cf222e">int</span><span style="color:#1f2328">)</span><span style="color:#fff"> </span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#1f2328">Gen</span><span style="color:#1f2328">[[][]</span><span style="color:#cf222e">int</span><span style="color:#1f2328">]</span><span style="color:#fff"> </span><span style="color:#1f2328">{</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">		</span><span style="color:#1f2328">row</span><span style="color:#fff"> </span><span style="color:#0550ae">:=</span><span style="color:#fff"> </span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#6639ba">SliceOfN</span><span style="color:#1f2328">(</span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#6639ba">Int</span><span style="color:#1f2328">(),</span><span style="color:#fff"> </span><span style="color:#1f2328">n</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#1f2328">n</span><span style="color:#1f2328">)</span><span style="color:#fff"> </span><span style="color:#57606a">// every row has the same length</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">		</span><span style="color:#cf222e">return</span><span style="color:#fff"> </span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#6639ba">SliceOfN</span><span style="color:#1f2328">(</span><span style="color:#1f2328">row</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#0550ae">1</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#0550ae">4</span><span style="color:#1f2328">)</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#1f2328">})</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#1f2328">)</span><span style="color:#fff">
+</span></span></span></code></pre><ul>
+<li><code>Map</code> applies a function to each value. The result shrinks as the input does.</li>
+<li><code>Filter</code> discards the values that fail a predicate and draws again. A predicate that rejects most values makes the run slow, and pbt gives up on a case after many rejections. Prefer building the value you want: <code>IntRange(1, 100)</code> over <code>Filter(Int(), positive)</code>.</li>
+<li><code>Bind</code> chooses the next generator from a value, which is how one part of a value can depend on another. PropEr calls it <code>?LET</code>.</li>
+</ul>
+<p><code>OneOf</code> picks one of several generators with equal probability and <code>Frequency</code> with weights; chapter 2 covers them. <code>Ptr</code> wraps a value in a pointer, with or without <code>nil</code>. <code>Lazy</code> defers the construction of a generator until it is first drawn from, which is what a recursive generator needs to refer to itself; chapter 9 shows the bounded form.</p>
+<h2 id="reports-show-how-a-value-was-built">Reports show how a value was built</h2>
+<p>A property that fails on a <code>User</code> reports the user and, under it, the labeled parts.</p>
+<pre style="background-color:#f7f7f7;-webkit-text-size-adjust:none;"><code><span style="display:flex;"><span><span style="color:#cf222e">var</span><span style="color:#fff"> </span><span style="color:#1f2328">displayNameProperty</span><span style="color:#fff"> </span><span style="color:#1f2328">=</span><span style="color:#fff"> </span><span style="color:#cf222e">func</span><span style="color:#1f2328">(</span><span style="color:#1f2328">t</span><span style="color:#fff"> </span><span style="color:#0550ae">*</span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#1f2328">T</span><span style="color:#1f2328">)</span><span style="color:#fff"> </span><span style="color:#1f2328">{</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#1f2328">u</span><span style="color:#fff"> </span><span style="color:#0550ae">:=</span><span style="color:#fff"> </span><span style="color:#1f2328">userGen</span><span style="color:#1f2328">.</span><span style="color:#6639ba">Draw</span><span style="color:#1f2328">(</span><span style="color:#1f2328">t</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#0a3069">&#34;user&#34;</span><span style="color:#1f2328">)</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#1f2328">display</span><span style="color:#fff"> </span><span style="color:#0550ae">:=</span><span style="color:#fff"> </span><span style="color:#1f2328">strings</span><span style="color:#1f2328">.</span><span style="color:#6639ba">ToUpper</span><span style="color:#1f2328">(</span><span style="color:#1f2328">u</span><span style="color:#1f2328">.</span><span style="color:#1f2328">Name</span><span style="color:#1f2328">[:</span><span style="color:#0550ae">1</span><span style="color:#1f2328">])</span><span style="color:#fff"> </span><span style="color:#0550ae">+</span><span style="color:#fff"> </span><span style="color:#1f2328">u</span><span style="color:#1f2328">.</span><span style="color:#1f2328">Name</span><span style="color:#1f2328">[</span><span style="color:#0550ae">1</span><span style="color:#1f2328">:]</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#cf222e">if</span><span style="color:#fff"> </span><span style="color:#1f2328">unicode</span><span style="color:#1f2328">.</span><span style="color:#6639ba">IsLower</span><span style="color:#1f2328">(</span><span style="color:#6639ba">rune</span><span style="color:#1f2328">(</span><span style="color:#1f2328">display</span><span style="color:#1f2328">[</span><span style="color:#0550ae">0</span><span style="color:#1f2328">]))</span><span style="color:#fff"> </span><span style="color:#1f2328">{</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">		</span><span style="color:#1f2328">t</span><span style="color:#1f2328">.</span><span style="color:#6639ba">Fatalf</span><span style="color:#1f2328">(</span><span style="color:#0a3069">&#34;display name %q is not capitalized&#34;</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#1f2328">display</span><span style="color:#1f2328">)</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#1f2328">}</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#cf222e">if</span><span style="color:#fff"> </span><span style="color:#6639ba">len</span><span style="color:#1f2328">(</span><span style="color:#1f2328">display</span><span style="color:#1f2328">)</span><span style="color:#fff"> </span><span style="color:#1f2328">&gt;</span><span style="color:#fff"> </span><span style="color:#0550ae">8</span><span style="color:#fff"> </span><span style="color:#1f2328">{</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">		</span><span style="color:#1f2328">t</span><span style="color:#1f2328">.</span><span style="color:#6639ba">Fatalf</span><span style="color:#1f2328">(</span><span style="color:#0a3069">&#34;display name %q is too long for the badge&#34;</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#1f2328">display</span><span style="color:#1f2328">)</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#1f2328">}</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#1f2328">}</span><span style="color:#fff">
+</span></span></span></code></pre><pre style="background-color:#f7f7f7;-webkit-text-size-adjust:none;"><code><span style="display:flex;"><span>[pbt] property failed after 3 passed checks and 145 shrink steps (size 4)
+</span></span><span style="display:flex;"><span>[pbt] user (user) = snippets.User{Name:&#34;aaaaaaaaa&#34;, Age:0, Email:&#34;aaaaaaaaa@example.com&#34;}
+</span></span><span style="display:flex;"><span>[pbt]   name (StringOfN(SampledFrom(26 values), 1, 12)) = &#34;aaaaaaaaa&#34;
+</span></span><span style="display:flex;"><span>[pbt]   age (IntRange(0, 120)) = 0
+</span></span><span style="display:flex;"><span>[pbt] error: display name &#34;Aaaaaaaaa&#34; is too long for the badge
+</span></span><span style="display:flex;"><span>[pbt] reproduce: go test -run &#39;TestDisplayName&#39; -pbt.seed=0x1
+</span></span></code></pre><p>The name shrank to the shortest string that still breaks the length check, nine letters of <code>a</code>, and the age to 0 because it played no part in the failure. A report lists labeled draws up to three levels deep and cuts each value at 2000 characters; the <code>ReportDepth</code> and <code>ReportLimit</code> options change both.</p>
+<h2 id="sampling-outside-a-property">Sampling outside a property</h2>
+<p><code>Example</code> returns one value of a generator, for a quick look or for a conventional test that needs a plausible input. A seed makes the value stable.</p>
+<pre style="background-color:#f7f7f7;-webkit-text-size-adjust:none;"><code><span style="display:flex;"><span><span style="color:#cf222e">func</span><span style="color:#fff"> </span><span style="color:#6639ba">TestExample</span><span style="color:#1f2328">(</span><span style="color:#1f2328">t</span><span style="color:#fff"> </span><span style="color:#0550ae">*</span><span style="color:#1f2328">testing</span><span style="color:#1f2328">.</span><span style="color:#1f2328">T</span><span style="color:#1f2328">)</span><span style="color:#fff"> </span><span style="color:#1f2328">{</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#1f2328">u</span><span style="color:#fff"> </span><span style="color:#0550ae">:=</span><span style="color:#fff"> </span><span style="color:#1f2328">userGen</span><span style="color:#1f2328">.</span><span style="color:#6639ba">Example</span><span style="color:#1f2328">(</span><span style="color:#0550ae">42</span><span style="color:#1f2328">)</span><span style="color:#fff"> </span><span style="color:#57606a">// a sample outside any property; the seed fixes it</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#cf222e">if</span><span style="color:#fff"> </span><span style="color:#1f2328">u</span><span style="color:#1f2328">.</span><span style="color:#1f2328">Age</span><span style="color:#fff"> </span><span style="color:#1f2328">&lt;</span><span style="color:#fff"> </span><span style="color:#0550ae">0</span><span style="color:#fff"> </span><span style="color:#0550ae">||</span><span style="color:#fff"> </span><span style="color:#1f2328">!</span><span style="color:#1f2328">strings</span><span style="color:#1f2328">.</span><span style="color:#6639ba">HasSuffix</span><span style="color:#1f2328">(</span><span style="color:#1f2328">u</span><span style="color:#1f2328">.</span><span style="color:#1f2328">Email</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#0a3069">&#34;@example.com&#34;</span><span style="color:#1f2328">)</span><span style="color:#fff"> </span><span style="color:#1f2328">{</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">		</span><span style="color:#1f2328">t</span><span style="color:#1f2328">.</span><span style="color:#6639ba">Fatalf</span><span style="color:#1f2328">(</span><span style="color:#0a3069">&#34;unexpected user %+v&#34;</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#1f2328">u</span><span style="color:#1f2328">)</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#1f2328">}</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#1f2328">}</span><span style="color:#fff">
+</span></span></span></code></pre><h2 id="values-that-generators-share">Values that generators share</h2>
+<p><code>Just(v)</code> returns the same <code>v</code> for every case. When <code>v</code> is a slice, a map or a pointer, every case sees the same object, so a property that modifies it changes what later cases and the report see. <code>SampledFrom(values)</code> copies the slice but hands out the elements as they are. Draw a fresh value from <code>Custom</code> when the property needs to modify it.</p>
+
+<div class="pager">
+<span>← <a href="index.html">Getting started</a></span>
+<span><a href="02-distribution.html">Size, distribution and statistics</a> →</span>
+</div>
+<footer>pbt user guide for pbt v0.2.0 · <a href="https://github.com/ymotongpoo/pbt/tree/main/docs/guide">source</a> · Apache License 2.0</footer>
+</main>
+</div>
+</body>
+</html>

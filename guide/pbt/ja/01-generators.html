@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>生成器 · pbt 利用ガイド</title>
+<link rel="canonical" href="https://go.ymotongpoo.com/pbt/guide/ja/01-generators.html">
+<style>
+:root { --fg: #1f2328; --muted: #59636e; --line: #d1d9e0; --accent: #0969da; --bg: #fff; --code: #f6f8fa; }
+* { box-sizing: border-box; }
+body { margin: 0; color: var(--fg); background: var(--bg); font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, "Hiragino Sans", "Noto Sans JP", sans-serif; }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+.layout { display: grid; grid-template-columns: 16rem minmax(0, 1fr); min-height: 100vh; }
+nav.side { border-right: 1px solid var(--line); padding: 1.5rem 1rem; font-size: 0.92rem; }
+nav.side h1 { font-size: 1rem; margin: 0 0 0.25rem; }
+nav.side .version { color: var(--muted); font-size: 0.8rem; margin-bottom: 1rem; }
+nav.side ol { list-style: none; padding: 0; margin: 0; }
+nav.side li { margin: 0.2rem 0; }
+nav.side li.current a { font-weight: 600; color: var(--fg); }
+nav.side .lang { margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--line); }
+main { padding: 2rem 3rem 4rem; max-width: 52rem; }
+main h1 { font-size: 1.9rem; line-height: 1.25; margin-top: 0; }
+main h2 { font-size: 1.35rem; margin-top: 2.2rem; border-bottom: 1px solid var(--line); padding-bottom: 0.2rem; }
+main h3 { font-size: 1.1rem; margin-top: 1.6rem; }
+code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.88em; }
+p code, li code, td code { background: var(--code); padding: 0.1em 0.3em; border-radius: 4px; }
+pre { background: var(--code) !important; padding: 0.9rem 1rem; border-radius: 6px; overflow-x: auto; line-height: 1.5; }
+table { border-collapse: collapse; margin: 1rem 0; font-size: 0.92rem; }
+th, td { border: 1px solid var(--line); padding: 0.35rem 0.6rem; text-align: left; vertical-align: top; }
+th { background: var(--code); }
+blockquote { margin: 1rem 0; padding: 0.2rem 1rem; border-left: 4px solid var(--line); color: var(--muted); }
+.pager { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--line); gap: 1rem; }
+footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
+@media (max-width: 760px) {
+  .layout { grid-template-columns: 1fr; }
+  nav.side { border-right: 0; border-bottom: 1px solid var(--line); }
+  main { padding: 1.5rem 1.2rem 3rem; }
+}
+</style>
+</head>
+<body>
+<div class="layout">
+<nav class="side">
+<h1><a href="index.html">pbt 利用ガイド</a></h1>
+<div class="version">pbt v0.2.0</div>
+<ol>
+<li><a href="index.html">はじめに</a></li>
+<li class="current"><a href="01-generators.html">生成器</a></li>
+<li><a href="02-distribution.html">サイズ、分布、統計</a></li>
+<li><a href="03-shrinking.html">縮小</a></li>
+<li><a href="04-properties.html">プロパティと実行</a></li>
+<li><a href="05-stateful.html">ステートフルテスト</a></li>
+<li><a href="06-parallel.html">並行テスト</a></li>
+<li><a href="07-fsm.html">状態機械</a></li>
+<li><a href="08-targeted.html">標的型探索と存在性</a></li>
+<li><a href="09-types.html">型から導く生成器</a></li>
+<li><a href="10-reference.html">次に読むもの</a></li>
+</ol>
+<div class="lang"><a href="../01-generators.html">English</a></div>
+<div class="lang"><a href="https://pkg.go.dev/go.ymotongpoo.com/pbt">pkg.go.dev</a> · <a href="https://github.com/ymotongpoo/pbt">GitHub</a></div>
+</nav>
+<main>
+<h1 id="heading">生成器</h1>
+<p>生成器は <code>pbt.Gen[V]</code> 型の値です。pbtが現在のケースについて記録している選択から <code>V</code> を作る方法を知っていて、その記録が縮小と再現を支えています。記録を自分で組むことはありません。生成器を組み合わせて、そこから値を取り出すだけです。</p>
+<h2 id="heading-1">組み込みの生成器</h2>
+<table>
+<thead>
+<tr>
+<th>値</th>
+<th>生成器</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>整数</td>
+<td><code>Int</code>、<code>IntRange</code>、<code>IntMin</code>、<code>IntMax</code>、<code>IntRangeToward</code>。<code>Int32</code>、<code>Int64</code>、<code>Uint</code>、<code>Uint32</code>、<code>Uint64</code>、<code>Byte</code> とそれぞれの <code>Range</code> 版。任意の整数型には <code>Integer[I]</code> と <code>IntegerRange[I]</code></td>
+</tr>
+<tr>
+<td>浮動小数点数</td>
+<td>有限の値には <code>Float64</code>、<code>Float64Range</code>、<code>Float32</code>、<code>Float32Range</code>。<code>AnyFloat64</code> はNaNと無限大を加える</td>
+</tr>
+<tr>
+<td>文字と文字列</td>
+<td><code>Bool</code>、<code>Rune</code>、<code>String</code>、<code>StringN</code>、<code>StringOf</code>、<code>StringOfN</code>、<code>Bytes</code>、<code>BytesN</code></td>
+</tr>
+<tr>
+<td>コレクション</td>
+<td><code>SliceOf</code>、<code>SliceOfN</code>、<code>SliceOfDistinct</code>、<code>SliceOfNDistinct</code>、<code>MapOf</code>、<code>MapOfN</code>、<code>Permutation</code></td>
+</tr>
+<tr>
+<td>選択</td>
+<td><code>Just</code>、<code>SampledFrom</code>、<code>OneOf</code>、<code>Frequency</code>、<code>Ptr</code></td>
+</tr>
+<tr>
+<td>関数</td>
+<td><code>Func</code>、<code>Func2</code>。コールバックを受け取るコードのプロパティ向けに、純粋な関数を生成する</td>
+</tr>
+<tr>
+<td>任意の値</td>
+<td>一般的な型を限られた範囲で混ぜる <code>Any</code> と、型から生成器を導く <code>Make[T]</code>（9章）</td>
+</tr>
+</tbody>
+</table>
+<p>整数は、バグが潜みやすい範囲の境界と小さな値に寄ります。文字列とコレクションの長さは、ケースのサイズパラメーターに従います。最大長の <code>-1</code> は上限なしを意味します。</p>
+<h2 id="heading-2">自分の生成器を作る</h2>
+<p><code>pbt.Custom</code> は <code>*pbt.T</code> を受け取る関数を生成器にします。その中では、他の生成器から任意の順序と制御構造で値を取り出せます。</p>
+<pre style="background-color:#f7f7f7;-webkit-text-size-adjust:none;"><code><span style="display:flex;"><span><span style="color:#cf222e">type</span><span style="color:#fff"> </span><span style="color:#1f2328">User</span><span style="color:#fff"> </span><span style="color:#cf222e">struct</span><span style="color:#fff"> </span><span style="color:#1f2328">{</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#1f2328">Name</span><span style="color:#fff">  </span><span style="color:#cf222e">string</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#1f2328">Age</span><span style="color:#fff">   </span><span style="color:#cf222e">int</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#1f2328">Email</span><span style="color:#fff"> </span><span style="color:#cf222e">string</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#1f2328">}</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#57606a">// userGen builds a User from smaller generators. Labeled draws inside a</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#57606a">// generator appear in the report, indented under the value they build.</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#cf222e">var</span><span style="color:#fff"> </span><span style="color:#1f2328">userGen</span><span style="color:#fff"> </span><span style="color:#1f2328">=</span><span style="color:#fff"> </span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#6639ba">Custom</span><span style="color:#1f2328">(</span><span style="color:#0a3069">&#34;user&#34;</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#cf222e">func</span><span style="color:#1f2328">(</span><span style="color:#1f2328">t</span><span style="color:#fff"> </span><span style="color:#0550ae">*</span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#1f2328">T</span><span style="color:#1f2328">)</span><span style="color:#fff"> </span><span style="color:#1f2328">User</span><span style="color:#fff"> </span><span style="color:#1f2328">{</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#1f2328">name</span><span style="color:#fff"> </span><span style="color:#0550ae">:=</span><span style="color:#fff"> </span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#6639ba">StringOfN</span><span style="color:#1f2328">(</span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#6639ba">SampledFrom</span><span style="color:#1f2328">([]</span><span style="color:#6639ba">rune</span><span style="color:#1f2328">(</span><span style="color:#0a3069">&#34;abcdefghijklmnopqrstuvwxyz&#34;</span><span style="color:#1f2328">)),</span><span style="color:#fff"> </span><span style="color:#0550ae">1</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#0550ae">12</span><span style="color:#1f2328">).</span><span style="color:#6639ba">Draw</span><span style="color:#1f2328">(</span><span style="color:#1f2328">t</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#0a3069">&#34;name&#34;</span><span style="color:#1f2328">)</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#cf222e">return</span><span style="color:#fff"> </span><span style="color:#1f2328">User</span><span style="color:#1f2328">{</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">		</span><span style="color:#1f2328">Name</span><span style="color:#1f2328">:</span><span style="color:#fff">  </span><span style="color:#1f2328">name</span><span style="color:#1f2328">,</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">		</span><span style="color:#1f2328">Age</span><span style="color:#1f2328">:</span><span style="color:#fff">   </span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#6639ba">IntRange</span><span style="color:#1f2328">(</span><span style="color:#0550ae">0</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#0550ae">120</span><span style="color:#1f2328">).</span><span style="color:#6639ba">Draw</span><span style="color:#1f2328">(</span><span style="color:#1f2328">t</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#0a3069">&#34;age&#34;</span><span style="color:#1f2328">),</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">		</span><span style="color:#1f2328">Email</span><span style="color:#1f2328">:</span><span style="color:#fff"> </span><span style="color:#1f2328">name</span><span style="color:#fff"> </span><span style="color:#0550ae">+</span><span style="color:#fff"> </span><span style="color:#0a3069">&#34;@example.com&#34;</span><span style="color:#1f2328">,</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#1f2328">}</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#1f2328">})</span><span style="color:#fff">
+</span></span></span></code></pre><p><code>Custom</code> に渡した名前が、報告でのこの生成器の表記になります。中で行う取り出しのラベルにも役割があります。生成器の中でラベルを付けて取り出した値は、組み上げた値の下に字下げして報告に並びます。<code>&quot;&quot;</code> でラベルを付けなかった値は報告に出ません。それ自体には関心のない値には、この扱いが向いています。</p>
+<h2 id="heading-3">生成器を組み合わせる</h2>
+<p>組み合わせの大半は3つの関数で書けます。</p>
+<pre style="background-color:#f7f7f7;-webkit-text-size-adjust:none;"><code><span style="display:flex;"><span><span style="color:#57606a">// Map transforms a value, Filter keeps the values that satisfy a predicate,</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#57606a">// and Bind picks the next generator from a value.</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#cf222e">var</span><span style="color:#fff"> </span><span style="color:#1f2328">(</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#1f2328">even</span><span style="color:#fff">    </span><span style="color:#1f2328">=</span><span style="color:#fff"> </span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#6639ba">Map</span><span style="color:#1f2328">(</span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#6639ba">IntRange</span><span style="color:#1f2328">(</span><span style="color:#0550ae">0</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#0550ae">500</span><span style="color:#1f2328">),</span><span style="color:#fff"> </span><span style="color:#cf222e">func</span><span style="color:#1f2328">(</span><span style="color:#1f2328">n</span><span style="color:#fff"> </span><span style="color:#cf222e">int</span><span style="color:#1f2328">)</span><span style="color:#fff"> </span><span style="color:#cf222e">int</span><span style="color:#fff"> </span><span style="color:#1f2328">{</span><span style="color:#fff"> </span><span style="color:#cf222e">return</span><span style="color:#fff"> </span><span style="color:#0550ae">2</span><span style="color:#fff"> </span><span style="color:#0550ae">*</span><span style="color:#fff"> </span><span style="color:#1f2328">n</span><span style="color:#fff"> </span><span style="color:#1f2328">})</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#1f2328">nonZero</span><span style="color:#fff"> </span><span style="color:#1f2328">=</span><span style="color:#fff"> </span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#6639ba">Filter</span><span style="color:#1f2328">(</span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#6639ba">Int</span><span style="color:#1f2328">(),</span><span style="color:#fff"> </span><span style="color:#cf222e">func</span><span style="color:#1f2328">(</span><span style="color:#1f2328">n</span><span style="color:#fff"> </span><span style="color:#cf222e">int</span><span style="color:#1f2328">)</span><span style="color:#fff"> </span><span style="color:#cf222e">bool</span><span style="color:#fff"> </span><span style="color:#1f2328">{</span><span style="color:#fff"> </span><span style="color:#cf222e">return</span><span style="color:#fff"> </span><span style="color:#1f2328">n</span><span style="color:#fff"> </span><span style="color:#0550ae">!=</span><span style="color:#fff"> </span><span style="color:#0550ae">0</span><span style="color:#fff"> </span><span style="color:#1f2328">})</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#1f2328">matrix</span><span style="color:#fff">  </span><span style="color:#1f2328">=</span><span style="color:#fff"> </span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#6639ba">Bind</span><span style="color:#1f2328">(</span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#6639ba">IntRange</span><span style="color:#1f2328">(</span><span style="color:#0550ae">1</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#0550ae">4</span><span style="color:#1f2328">),</span><span style="color:#fff"> </span><span style="color:#cf222e">func</span><span style="color:#1f2328">(</span><span style="color:#1f2328">n</span><span style="color:#fff"> </span><span style="color:#cf222e">int</span><span style="color:#1f2328">)</span><span style="color:#fff"> </span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#1f2328">Gen</span><span style="color:#1f2328">[[][]</span><span style="color:#cf222e">int</span><span style="color:#1f2328">]</span><span style="color:#fff"> </span><span style="color:#1f2328">{</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">		</span><span style="color:#1f2328">row</span><span style="color:#fff"> </span><span style="color:#0550ae">:=</span><span style="color:#fff"> </span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#6639ba">SliceOfN</span><span style="color:#1f2328">(</span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#6639ba">Int</span><span style="color:#1f2328">(),</span><span style="color:#fff"> </span><span style="color:#1f2328">n</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#1f2328">n</span><span style="color:#1f2328">)</span><span style="color:#fff"> </span><span style="color:#57606a">// every row has the same length</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">		</span><span style="color:#cf222e">return</span><span style="color:#fff"> </span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#6639ba">SliceOfN</span><span style="color:#1f2328">(</span><span style="color:#1f2328">row</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#0550ae">1</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#0550ae">4</span><span style="color:#1f2328">)</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#1f2328">})</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#1f2328">)</span><span style="color:#fff">
+</span></span></span></code></pre><ul>
+<li><code>Map</code> は各値に関数を適用します。結果は入力と同じように縮小します。</li>
+<li><code>Filter</code> は述語を満たさない値を捨てて引き直します。大半の値を捨てる述語は実行を遅くし、pbtは何度も捨てたケースを諦めます。<code>Filter(Int(), positive)</code> より <code>IntRange(1, 100)</code> のように、欲しい値を直接作るほうを選んでください。</li>
+<li><code>Bind</code> は値から次の生成器を選びます。値の一部を別の部分に依存させる手段で、PropErでは <code>?LET</code> と呼びます。</li>
+</ul>
+<p><code>OneOf</code> は複数の生成器から等確率で1つを選び、<code>Frequency</code> は重みで選びます。どちらも2章で扱います。<code>Ptr</code> は値をポインタで包み、<code>nil</code> を含めるかどうかを選べます。<code>Lazy</code> は生成器の構築を最初に値を取り出すときまで遅らせます。再帰的な生成器が自分自身を参照するために必要で、上限を付けた形は9章で示します。</p>
+<h2 id="heading-4">報告は値の組み上がり方を示す</h2>
+<p><code>User</code> で失敗するプロパティの報告には、そのユーザーと、その下にラベル付きの部品が並びます。</p>
+<pre style="background-color:#f7f7f7;-webkit-text-size-adjust:none;"><code><span style="display:flex;"><span><span style="color:#cf222e">var</span><span style="color:#fff"> </span><span style="color:#1f2328">displayNameProperty</span><span style="color:#fff"> </span><span style="color:#1f2328">=</span><span style="color:#fff"> </span><span style="color:#cf222e">func</span><span style="color:#1f2328">(</span><span style="color:#1f2328">t</span><span style="color:#fff"> </span><span style="color:#0550ae">*</span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#1f2328">T</span><span style="color:#1f2328">)</span><span style="color:#fff"> </span><span style="color:#1f2328">{</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#1f2328">u</span><span style="color:#fff"> </span><span style="color:#0550ae">:=</span><span style="color:#fff"> </span><span style="color:#1f2328">userGen</span><span style="color:#1f2328">.</span><span style="color:#6639ba">Draw</span><span style="color:#1f2328">(</span><span style="color:#1f2328">t</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#0a3069">&#34;user&#34;</span><span style="color:#1f2328">)</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#1f2328">display</span><span style="color:#fff"> </span><span style="color:#0550ae">:=</span><span style="color:#fff"> </span><span style="color:#1f2328">strings</span><span style="color:#1f2328">.</span><span style="color:#6639ba">ToUpper</span><span style="color:#1f2328">(</span><span style="color:#1f2328">u</span><span style="color:#1f2328">.</span><span style="color:#1f2328">Name</span><span style="color:#1f2328">[:</span><span style="color:#0550ae">1</span><span style="color:#1f2328">])</span><span style="color:#fff"> </span><span style="color:#0550ae">+</span><span style="color:#fff"> </span><span style="color:#1f2328">u</span><span style="color:#1f2328">.</span><span style="color:#1f2328">Name</span><span style="color:#1f2328">[</span><span style="color:#0550ae">1</span><span style="color:#1f2328">:]</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#cf222e">if</span><span style="color:#fff"> </span><span style="color:#1f2328">unicode</span><span style="color:#1f2328">.</span><span style="color:#6639ba">IsLower</span><span style="color:#1f2328">(</span><span style="color:#6639ba">rune</span><span style="color:#1f2328">(</span><span style="color:#1f2328">display</span><span style="color:#1f2328">[</span><span style="color:#0550ae">0</span><span style="color:#1f2328">]))</span><span style="color:#fff"> </span><span style="color:#1f2328">{</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">		</span><span style="color:#1f2328">t</span><span style="color:#1f2328">.</span><span style="color:#6639ba">Fatalf</span><span style="color:#1f2328">(</span><span style="color:#0a3069">&#34;display name %q is not capitalized&#34;</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#1f2328">display</span><span style="color:#1f2328">)</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#1f2328">}</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#cf222e">if</span><span style="color:#fff"> </span><span style="color:#6639ba">len</span><span style="color:#1f2328">(</span><span style="color:#1f2328">display</span><span style="color:#1f2328">)</span><span style="color:#fff"> </span><span style="color:#1f2328">&gt;</span><span style="color:#fff"> </span><span style="color:#0550ae">8</span><span style="color:#fff"> </span><span style="color:#1f2328">{</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">		</span><span style="color:#1f2328">t</span><span style="color:#1f2328">.</span><span style="color:#6639ba">Fatalf</span><span style="color:#1f2328">(</span><span style="color:#0a3069">&#34;display name %q is too long for the badge&#34;</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#1f2328">display</span><span style="color:#1f2328">)</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#1f2328">}</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#1f2328">}</span><span style="color:#fff">
+</span></span></span></code></pre><pre style="background-color:#f7f7f7;-webkit-text-size-adjust:none;"><code><span style="display:flex;"><span>[pbt] property failed after 3 passed checks and 145 shrink steps (size 4)
+</span></span><span style="display:flex;"><span>[pbt] user (user) = snippets.User{Name:&#34;aaaaaaaaa&#34;, Age:0, Email:&#34;aaaaaaaaa@example.com&#34;}
+</span></span><span style="display:flex;"><span>[pbt]   name (StringOfN(SampledFrom(26 values), 1, 12)) = &#34;aaaaaaaaa&#34;
+</span></span><span style="display:flex;"><span>[pbt]   age (IntRange(0, 120)) = 0
+</span></span><span style="display:flex;"><span>[pbt] error: display name &#34;Aaaaaaaaa&#34; is too long for the badge
+</span></span><span style="display:flex;"><span>[pbt] reproduce: go test -run &#39;TestDisplayName&#39; -pbt.seed=0x1
+</span></span></code></pre><p>名前は、長さの検査にまだ引っかかる最短の文字列である <code>a</code> 9文字まで縮みました。年齢は失敗に関係しないので0まで縮んでいます。報告はラベル付きの値を3段の深さまで載せ、1つの値を2000文字で切ります。<code>ReportDepth</code> と <code>ReportLimit</code> のオプションで両方を変えられます。</p>
+<h2 id="heading-5">プロパティの外で値を見る</h2>
+<p><code>Example</code> は生成器の値を1つ返します。生成器の出力を手早く確かめるときや、従来のテストでそれらしい入力が必要なときに使います。シードを渡すと値が固定されます。</p>
+<pre style="background-color:#f7f7f7;-webkit-text-size-adjust:none;"><code><span style="display:flex;"><span><span style="color:#cf222e">func</span><span style="color:#fff"> </span><span style="color:#6639ba">TestExample</span><span style="color:#1f2328">(</span><span style="color:#1f2328">t</span><span style="color:#fff"> </span><span style="color:#0550ae">*</span><span style="color:#1f2328">testing</span><span style="color:#1f2328">.</span><span style="color:#1f2328">T</span><span style="color:#1f2328">)</span><span style="color:#fff"> </span><span style="color:#1f2328">{</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#1f2328">u</span><span style="color:#fff"> </span><span style="color:#0550ae">:=</span><span style="color:#fff"> </span><span style="color:#1f2328">userGen</span><span style="color:#1f2328">.</span><span style="color:#6639ba">Example</span><span style="color:#1f2328">(</span><span style="color:#0550ae">42</span><span style="color:#1f2328">)</span><span style="color:#fff"> </span><span style="color:#57606a">// a sample outside any property; the seed fixes it</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#cf222e">if</span><span style="color:#fff"> </span><span style="color:#1f2328">u</span><span style="color:#1f2328">.</span><span style="color:#1f2328">Age</span><span style="color:#fff"> </span><span style="color:#1f2328">&lt;</span><span style="color:#fff"> </span><span style="color:#0550ae">0</span><span style="color:#fff"> </span><span style="color:#0550ae">||</span><span style="color:#fff"> </span><span style="color:#1f2328">!</span><span style="color:#1f2328">strings</span><span style="color:#1f2328">.</span><span style="color:#6639ba">HasSuffix</span><span style="color:#1f2328">(</span><span style="color:#1f2328">u</span><span style="color:#1f2328">.</span><span style="color:#1f2328">Email</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#0a3069">&#34;@example.com&#34;</span><span style="color:#1f2328">)</span><span style="color:#fff"> </span><span style="color:#1f2328">{</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">		</span><span style="color:#1f2328">t</span><span style="color:#1f2328">.</span><span style="color:#6639ba">Fatalf</span><span style="color:#1f2328">(</span><span style="color:#0a3069">&#34;unexpected user %+v&#34;</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#1f2328">u</span><span style="color:#1f2328">)</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#1f2328">}</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#1f2328">}</span><span style="color:#fff">
+</span></span></span></code></pre><h2 id="heading-6">生成器が共有する値</h2>
+<p><code>Just(v)</code> はすべてのケースに同じ <code>v</code> を返します。<code>v</code> がスライス、マップ、ポインタなら、すべてのケースが同じオブジェクトを見ます。プロパティがそれを変更すると、後のケースと報告が見るものも変わってしまいます。<code>SampledFrom(values)</code> はスライスをコピーしますが、要素はそのまま渡します。プロパティが値を変更する必要があるなら、<code>Custom</code> で毎回新しい値を作ってください。</p>
+
+<div class="pager">
+<span>← <a href="index.html">はじめに</a></span>
+<span><a href="02-distribution.html">サイズ、分布、統計</a> →</span>
+</div>
+<footer>pbt 利用ガイド for pbt v0.2.0 · <a href="https://github.com/ymotongpoo/pbt/tree/main/docs/guide">source</a> · Apache License 2.0</footer>
+</main>
+</div>
+</body>
+</html>
