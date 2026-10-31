@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>サイズ、分布、統計 · pbt 利用ガイド</title>
-<link rel="canonical" href="https://go.ymotongpoo.com/pbt/guide/ja/02-distribution.html">
+<link rel="canonical" href="https://go.ymotongpoo.com/pbt/guide/ja/02-distribution">
 <style>
 :root { --fg: #1f2328; --muted: #59636e; --line: #d1d9e0; --accent: #0969da; --bg: #fff; --code: #f6f8fa; }
 * { box-sizing: border-box; }
@@ -42,22 +42,22 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 <body>
 <div class="layout">
 <nav class="side">
-<h1><a href="index.html">pbt 利用ガイド</a></h1>
+<h1><a href="./">pbt 利用ガイド</a></h1>
 <div class="version">pbt v0.2.0</div>
 <ol>
-<li><a href="index.html">はじめに</a></li>
-<li><a href="01-generators.html">生成器</a></li>
-<li class="current"><a href="02-distribution.html">サイズ、分布、統計</a></li>
-<li><a href="03-shrinking.html">縮小</a></li>
-<li><a href="04-properties.html">プロパティと実行</a></li>
-<li><a href="05-stateful.html">ステートフルテスト</a></li>
-<li><a href="06-parallel.html">並行テスト</a></li>
-<li><a href="07-fsm.html">状態機械</a></li>
-<li><a href="08-targeted.html">標的型探索と存在性</a></li>
-<li><a href="09-types.html">型から導く生成器</a></li>
-<li><a href="10-reference.html">次に読むもの</a></li>
+<li><a href="./">はじめに</a></li>
+<li><a href="01-generators">生成器</a></li>
+<li class="current"><a href="02-distribution">サイズ、分布、統計</a></li>
+<li><a href="03-shrinking">縮小</a></li>
+<li><a href="04-properties">プロパティと実行</a></li>
+<li><a href="05-stateful">ステートフルテスト</a></li>
+<li><a href="06-parallel">並行テスト</a></li>
+<li><a href="07-fsm">状態機械</a></li>
+<li><a href="08-targeted">標的型探索と存在性</a></li>
+<li><a href="09-types">型から導く生成器</a></li>
+<li><a href="10-reference">次に読むもの</a></li>
 </ol>
-<div class="lang"><a href="../02-distribution.html">English</a></div>
+<div class="lang"><a href="../02-distribution">English</a></div>
 <div class="lang"><a href="https://pkg.go.dev/go.ymotongpoo.com/pbt">pkg.go.dev</a> · <a href="https://github.com/ymotongpoo/pbt">GitHub</a></div>
 </nav>
 <main>
@@ -139,8 +139,8 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 </span></span></code></pre><p>区間が30%を除外した時点、つまり125ケースで実行は止まりました。観測された割合は <code>IntRange</code> についても教えてくれます。0は境界値なので、1000分の1よりずっと頻繫に出ているのです。統計はそれを知る手段で、一様な分布がプロパティに必要なときに分布を変える手段が <code>Frequency</code> や <code>SampledFrom</code> です。</p>
 
 <div class="pager">
-<span>← <a href="01-generators.html">生成器</a></span>
-<span><a href="03-shrinking.html">縮小</a> →</span>
+<span>← <a href="01-generators">生成器</a></span>
+<span><a href="03-shrinking">縮小</a> →</span>
 </div>
 <footer>pbt 利用ガイド for pbt v0.2.0 · <a href="https://github.com/ymotongpoo/pbt/tree/main/docs/guide">source</a> · Apache License 2.0</footer>
 </main>

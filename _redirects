@@ -1,13 +1,10 @@
 # go.ymotongpoo.com: vanity import paths for Go modules, plus the pbt guide.
 # Rules apply in order, the first match wins, and they take precedence over
-# static assets, so the guide's rules come before the catch-all for /pbt.
-# The guide's files live under /guide/pbt and are served at /pbt/guide.
-/pbt/guide        /pbt/guide/               301
-/pbt/guide/       /guide/pbt/index.html     200
-/pbt/guide/ja     /pbt/guide/ja/            301
-/pbt/guide/ja/    /guide/pbt/ja/index.html  200
-/pbt/guide/*      /guide/pbt/:splat         200
-# Every other path under /pbt returns the same page so that `go get` can
-# resolve go.ymotongpoo.com/pbt and all of its subpackages (e.g. /pbt/fsm).
-/pbt              /pbt/index.html           200
-/pbt/*            /pbt/index.html           200
+# static assets. Destinations are clean URLs: a destination that names an
+# index.html or .html file is rejected as a loop by the rule validator.
+# The go-import page is stored under /goimport, outside the /pbt pattern.
+/pbt/guide        /pbt/guide/        301
+/pbt/guide/ja     /pbt/guide/ja/     301
+/pbt/guide/*      /guide/pbt/:splat  200
+/pbt              /goimport/pbt/     200
+/pbt/*            /goimport/pbt/     200

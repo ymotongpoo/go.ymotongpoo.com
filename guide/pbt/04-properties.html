@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Properties and runs · pbt user guide</title>
-<link rel="canonical" href="https://go.ymotongpoo.com/pbt/guide/04-properties.html">
+<link rel="canonical" href="https://go.ymotongpoo.com/pbt/guide/04-properties">
 <style>
 :root { --fg: #1f2328; --muted: #59636e; --line: #d1d9e0; --accent: #0969da; --bg: #fff; --code: #f6f8fa; }
 * { box-sizing: border-box; }
@@ -42,22 +42,22 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 <body>
 <div class="layout">
 <nav class="side">
-<h1><a href="index.html">pbt user guide</a></h1>
+<h1><a href="./">pbt user guide</a></h1>
 <div class="version">pbt v0.2.0</div>
 <ol>
-<li><a href="index.html">Getting started</a></li>
-<li><a href="01-generators.html">Generators</a></li>
-<li><a href="02-distribution.html">Size, distribution and statistics</a></li>
-<li><a href="03-shrinking.html">Shrinking</a></li>
-<li class="current"><a href="04-properties.html">Properties and runs</a></li>
-<li><a href="05-stateful.html">Stateful testing</a></li>
-<li><a href="06-parallel.html">Parallel testing</a></li>
-<li><a href="07-fsm.html">State machines</a></li>
-<li><a href="08-targeted.html">Targeted search and existence</a></li>
-<li><a href="09-types.html">Generators from types</a></li>
-<li><a href="10-reference.html">Where to go next</a></li>
+<li><a href="./">Getting started</a></li>
+<li><a href="01-generators">Generators</a></li>
+<li><a href="02-distribution">Size, distribution and statistics</a></li>
+<li><a href="03-shrinking">Shrinking</a></li>
+<li class="current"><a href="04-properties">Properties and runs</a></li>
+<li><a href="05-stateful">Stateful testing</a></li>
+<li><a href="06-parallel">Parallel testing</a></li>
+<li><a href="07-fsm">State machines</a></li>
+<li><a href="08-targeted">Targeted search and existence</a></li>
+<li><a href="09-types">Generators from types</a></li>
+<li><a href="10-reference">Where to go next</a></li>
 </ol>
-<div class="lang"><a href="ja/04-properties.html">日本語</a></div>
+<div class="lang"><a href="ja/04-properties">日本語</a></div>
 <div class="lang"><a href="https://pkg.go.dev/go.ymotongpoo.com/pbt">pkg.go.dev</a> · <a href="https://github.com/ymotongpoo/pbt">GitHub</a></div>
 </nav>
 <main>
@@ -289,8 +289,8 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 <p>The failing case is also saved under <code>testdata/pbt/&lt;TestName&gt;/&lt;hash&gt;</code> as a text file with the size, the drawn values as comments, and the choices. Every later <code>Check</code> of the same test replays the saved cases before generating new ones and fails if one still fails, so the regression case follows the code into version control. Delete the file to drop the case. Three options adjust this behavior: <code>NoSave</code> keeps a run from writing, <code>NoReplay</code> skips the saved cases, and <code>ReplayFile</code> or <code>-pbt.replay=FILE</code> replays one saved file in any test, which is how you hand a case from one test to another or reproduce a failure from a CI log.</p>
 
 <div class="pager">
-<span>← <a href="03-shrinking.html">Shrinking</a></span>
-<span><a href="05-stateful.html">Stateful testing</a> →</span>
+<span>← <a href="03-shrinking">Shrinking</a></span>
+<span><a href="05-stateful">Stateful testing</a> →</span>
 </div>
 <footer>pbt user guide for pbt v0.2.0 · <a href="https://github.com/ymotongpoo/pbt/tree/main/docs/guide">source</a> · Apache License 2.0</footer>
 </main>

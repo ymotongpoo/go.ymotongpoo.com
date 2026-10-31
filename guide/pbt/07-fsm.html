@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>State machines · pbt user guide</title>
-<link rel="canonical" href="https://go.ymotongpoo.com/pbt/guide/07-fsm.html">
+<link rel="canonical" href="https://go.ymotongpoo.com/pbt/guide/07-fsm">
 <style>
 :root { --fg: #1f2328; --muted: #59636e; --line: #d1d9e0; --accent: #0969da; --bg: #fff; --code: #f6f8fa; }
 * { box-sizing: border-box; }
@@ -42,22 +42,22 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 <body>
 <div class="layout">
 <nav class="side">
-<h1><a href="index.html">pbt user guide</a></h1>
+<h1><a href="./">pbt user guide</a></h1>
 <div class="version">pbt v0.2.0</div>
 <ol>
-<li><a href="index.html">Getting started</a></li>
-<li><a href="01-generators.html">Generators</a></li>
-<li><a href="02-distribution.html">Size, distribution and statistics</a></li>
-<li><a href="03-shrinking.html">Shrinking</a></li>
-<li><a href="04-properties.html">Properties and runs</a></li>
-<li><a href="05-stateful.html">Stateful testing</a></li>
-<li><a href="06-parallel.html">Parallel testing</a></li>
-<li class="current"><a href="07-fsm.html">State machines</a></li>
-<li><a href="08-targeted.html">Targeted search and existence</a></li>
-<li><a href="09-types.html">Generators from types</a></li>
-<li><a href="10-reference.html">Where to go next</a></li>
+<li><a href="./">Getting started</a></li>
+<li><a href="01-generators">Generators</a></li>
+<li><a href="02-distribution">Size, distribution and statistics</a></li>
+<li><a href="03-shrinking">Shrinking</a></li>
+<li><a href="04-properties">Properties and runs</a></li>
+<li><a href="05-stateful">Stateful testing</a></li>
+<li><a href="06-parallel">Parallel testing</a></li>
+<li class="current"><a href="07-fsm">State machines</a></li>
+<li><a href="08-targeted">Targeted search and existence</a></li>
+<li><a href="09-types">Generators from types</a></li>
+<li><a href="10-reference">Where to go next</a></li>
 </ol>
-<div class="lang"><a href="ja/07-fsm.html">日本語</a></div>
+<div class="lang"><a href="ja/07-fsm">日本語</a></div>
 <div class="lang"><a href="https://pkg.go.dev/go.ymotongpoo.com/pbt">pkg.go.dev</a> · <a href="https://github.com/ymotongpoo/pbt">GitHub</a></div>
 </nav>
 <main>
@@ -142,8 +142,8 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 </span></span></code></pre><p>The low share of <code>new</code> is expected: every sequence leaves that state after one or two commands and never returns. If a state matters and the statistics show that sequences rarely reach it, raise the weights of the transitions that lead there.</p>
 
 <div class="pager">
-<span>← <a href="06-parallel.html">Parallel testing</a></span>
-<span><a href="08-targeted.html">Targeted search and existence</a> →</span>
+<span>← <a href="06-parallel">Parallel testing</a></span>
+<span><a href="08-targeted">Targeted search and existence</a> →</span>
 </div>
 <footer>pbt user guide for pbt v0.2.0 · <a href="https://github.com/ymotongpoo/pbt/tree/main/docs/guide">source</a> · Apache License 2.0</footer>
 </main>
