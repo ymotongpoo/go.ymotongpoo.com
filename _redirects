@@ -1,0 +1,5 @@
+# go.ymotongpoo.com: vanity import paths for Go modules.
+# Every path under /pbt returns the same page so that `go get` can resolve
+# go.ymotongpoo.com/pbt and all of its subpackages (e.g. /pbt/fsm).
+/pbt    /pbt/index.html 200
+/pbt/*  /pbt/index.html 200
