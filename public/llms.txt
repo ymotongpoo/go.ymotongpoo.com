@@ -1,0 +1,7 @@
+# go.ymotongpoo.com
+
+> Go modules published by Yoshi Yamaguchi under the import path prefix go.ymotongpoo.com, with their documentation. A module that has documentation has its own llms.txt under its path, which is the more specific index for the pages there.
+
+## Modules
+
+- [go.ymotongpoo.com/pbt](https://go.ymotongpoo.com/pbt/llms.txt): property-based testing for Go with the feature set of PropEr
