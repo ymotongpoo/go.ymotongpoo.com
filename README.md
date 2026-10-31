@@ -24,8 +24,10 @@ The site serves the `go-import` meta tags, which let `go get` resolve
   `/pbt/*` to a file under `/pbt`. `pbt/index.html` is a copy, kept as the
   static fallback for `/pbt/`; change both together.
 - `guide/pbt/`: the rendered guide. Do not edit it here: the sources are
-  `docs/guide` on `main`, and `cd site && go run . -version vX.Y.Z` renders
-  them into `site/public`, which is copied to `guide/pbt`. Pages are served
+  `docs/guide` on `main`, and `cd site && go run . -version vX.Y.Z
+  -analytics G-EC4QPYV95Y` renders them into `site/public`, which is copied
+  to `guide/pbt`. The `-analytics` flag is the Google Analytics measurement
+  ID of go.ymotongpoo.com; without it the pages carry no tag. Pages are served
   at clean URLs (`/pbt/guide/01-generators`), and the links inside them
   are relative and extensionless.
 - `404.html`: served with status 404 for unknown paths. Without it, Pages
