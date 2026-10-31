@@ -70,9 +70,9 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 <main>
 <h1 id="getting-started">Getting started</h1>
 <p>pbt is a property-based testing library for Go. A property is a test that must hold for every input of some shape. pbt generates the inputs, shrinks a failing one to a small case, and saves that case so that the next <code>go test</code> run replays it. The feature set follows Erlang's <a href="https://proper-testing.github.io/">PropEr</a>: generators whose distribution you control, statistics to check that control, stateful and parallel command testing, state machines, targeted search, and existential properties.</p>
-<p>This guide describes pbt v0.2.0. It assumes that you write tests with <code>go test</code>. The <a href="https://pkg.go.dev/go.ymotongpoo.com/pbt">package documentation</a> is the reference for every function; the chapters here explain how the pieces fit together and which one to reach for.</p>
+<p>This guide describes pbt v0.3.0. It assumes that you write tests with <code>go test</code>. The <a href="https://pkg.go.dev/go.ymotongpoo.com/pbt">package documentation</a> is the reference for every function; the chapters here explain how the pieces fit together and which one to reach for.</p>
 <h2 id="install">Install</h2>
-<pre style="background-color:#f7f7f7;-webkit-text-size-adjust:none;"><code><span style="display:flex;"><span>go get go.ymotongpoo.com/pbt@v0.2.0
+<pre style="background-color:#f7f7f7;-webkit-text-size-adjust:none;"><code><span style="display:flex;"><span>go get go.ymotongpoo.com/pbt@v0.3.0
 </span></span></code></pre><p>pbt needs Go 1.25 or later and has no dependencies outside the standard library. Import it as <code>go.ymotongpoo.com/pbt</code>.</p>
 <h2 id="a-first-property">A first property</h2>
 <p>A property is a function that receives a <code>*pbt.T</code>, draws values from generators, and reports a failure through the methods it shares with <code>*testing.T</code>. <code>pbt.Check</code> runs it.</p>
