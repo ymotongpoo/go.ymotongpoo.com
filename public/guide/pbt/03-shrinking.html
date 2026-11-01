@@ -52,7 +52,7 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 <div class="layout">
 <nav class="side">
 <h1><a href="./">pbt user guide</a></h1>
-<div class="version">pbt v0.3.1</div>
+<div class="version">pbt v0.3.2</div>
 <ol>
 <li><a href="./">Getting started</a></li>
 <li><a href="01-generators">Generators</a></li>
@@ -138,6 +138,7 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 </span></span></span></code></pre><p>A property that fails on two or more elements reports <code>[]int{1, 1}</code>, with the other two parts gone.</p>
 <h2 id="keeping-a-value-as-it-is">Keeping a value as it is</h2>
 <p><code>NoShrink</code> marks a value that the shrinker must leave alone. Use it for opaque tokens and for inputs whose shape is fixed by the system under test, where shrinking would only spend time.</p>
+<p>A collection can still drop an element generated with <code>NoShrink</code>; the elements that remain keep their values.</p>
 <pre style="background-color:#f7f7f7;-webkit-text-size-adjust:none;"><code><span style="display:flex;"><span><span style="color:#57606a">// A token the system under test treats as opaque; shrinking it would only</span><span style="color:#fff">
 </span></span></span><span style="display:flex;"><span><span style="color:#57606a">// slow the search down.</span><span style="color:#fff">
 </span></span></span><span style="display:flex;"><span><span style="color:#cf222e">var</span><span style="color:#fff"> </span><span style="color:#1f2328">token</span><span style="color:#fff"> </span><span style="color:#1f2328">=</span><span style="color:#fff"> </span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#6639ba">NoShrink</span><span style="color:#1f2328">(</span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#6639ba">StringOfN</span><span style="color:#1f2328">(</span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#6639ba">SampledFrom</span><span style="color:#1f2328">([]</span><span style="color:#6639ba">rune</span><span style="color:#1f2328">(</span><span style="color:#0a3069">&#34;0123456789abcdef&#34;</span><span style="color:#1f2328">)),</span><span style="color:#fff"> </span><span style="color:#0550ae">32</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#0550ae">32</span><span style="color:#1f2328">))</span><span style="color:#fff">
@@ -182,7 +183,7 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 <span>← <a href="02-distribution">Size, distribution and statistics</a></span>
 <span><a href="04-properties">Properties and runs</a> →</span>
 </div>
-<footer>pbt user guide for pbt v0.3.1 · <a href="https://github.com/ymotongpoo/pbt/tree/main/docs/guide">source</a> · Apache License 2.0</footer>
+<footer>pbt user guide for pbt v0.3.2 · <a href="https://github.com/ymotongpoo/pbt/tree/main/docs/guide">source</a> · Apache License 2.0</footer>
 </main>
 </div>
 </body>

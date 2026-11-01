@@ -1,4 +1,4 @@
-# pbt user guide (v0.3.1)
+# pbt user guide (v0.3.2)
 
 > The user guide of pbt, a property-based testing library for Go, in one file. The index of the documentation is https://go.ymotongpoo.com/pbt/guide/llms.txt.
 
@@ -8,12 +8,12 @@
 
 pbt is a property-based testing library for Go. A property is a test that must hold for every input of some shape. pbt generates the inputs, shrinks a failing one to a small case, and saves that case so that the next `go test` run replays it. The feature set follows Erlang's [PropEr](https://proper-testing.github.io/): generators whose distribution you control, statistics to check that control, stateful and parallel command testing, state machines, targeted search, and existential properties.
 
-This guide describes pbt v0.3.1. It assumes that you write tests with `go test`. The [package documentation](https://pkg.go.dev/go.ymotongpoo.com/pbt) is the reference for every function; the chapters here explain how the pieces fit together and which one to reach for.
+This guide describes pbt v0.3.2. It assumes that you write tests with `go test`. The [package documentation](https://pkg.go.dev/go.ymotongpoo.com/pbt) is the reference for every function; the chapters here explain how the pieces fit together and which one to reach for.
 
 ## Install
 
 ```sh
-go get go.ymotongpoo.com/pbt@v0.3.1
+go get go.ymotongpoo.com/pbt@v0.3.2
 ```
 
 pbt needs Go 1.25 or later and has no dependencies outside the standard library. Import it as `go.ymotongpoo.com/pbt`.
@@ -196,7 +196,7 @@ The name shrank to the shortest string that still breaks the length check, nine 
 
 ## Sampling outside a property
 
-`Example` returns one value of a generator, for a quick look or for a conventional test that needs a plausible input. A seed makes the value stable.
+`Example` returns one value of a generator, for a quick look or for a conventional test that needs a plausible input. A seed makes the value stable for the same generator code and pbt version.
 
 ```go
 func TestExample(t *testing.T) {
@@ -386,6 +386,8 @@ A property that fails on two or more elements reports `[]int{1, 1}`, with the ot
 
 `NoShrink` marks a value that the shrinker must leave alone. Use it for opaque tokens and for inputs whose shape is fixed by the system under test, where shrinking would only spend time.
 
+A collection can still drop an element generated with `NoShrink`; the elements that remain keep their values.
+
 ```go
 // A token the system under test treats as opaque; shrinking it would only
 // slow the search down.
@@ -497,7 +499,7 @@ var TestReverseTwice = pbt.MakeCheck(func(t *pbt.T) {
 
 ## Discarding cases
 
-`t.Assume(cond)` discards the current case when the condition is false, as PropEr's `?IMPLIES` does. A discarded case counts neither as a pass nor as a failure, and `Check` draws another. `Skip`, `Skipf` and `SkipNow` do the same.
+`t.Assume(cond)` discards the current case when the condition is false, as PropEr's `?IMPLIES` does. A discarded case counts neither as a pass nor as a failure, and `Check` draws another. `Skip`, `Skipf` and `SkipNow` do the same. A failure already recorded in the case takes precedence over a later discard.
 
 ```go
 func TestDivision(t *testing.T) {
@@ -517,6 +519,8 @@ Discards are a budget. When they exceed ten times the number of checks, the run 
 ## Setup and cleanup
 
 The `Setup` option runs a function before every case. It may return a teardown function, which runs after the case. `t.Cleanup` registers a function from inside the property for the same purpose, and the cleanups run in reverse order after the case, failed or not.
+
+Every cleanup runs even if another cleanup panics or discards. A cleanup failure fails the case even if the property discarded it; a cleanup discard cannot erase a failure or panic from the property. If both the property and a cleanup panic, the report keeps the property's panic.
 
 ```go
 func TestFileRoundTrip(t *testing.T) {
@@ -542,7 +546,7 @@ func TestFileRoundTrip(t *testing.T) {
 
 ## Combining properties
 
-`Conjunction` runs several named properties on the same case and names the ones that fail. `Deadline` fails a case that takes longer than a duration.
+`Conjunction` runs several named properties on the same case and names the ones that fail. A later sub-property that discards the case does not erase an earlier sub-property's failure. `Deadline` fails a case that takes longer than a duration.
 
 ```go
 func TestStringProperties(t *testing.T) {
@@ -635,7 +639,7 @@ func TestPanics(t *testing.T) {
 
 ## Seeds, saved cases and replay
 
-Every report ends with a `reproduce:` line that carries the seed of the run. Passing that seed with `-pbt.seed` repeats the same sequence of cases, including the failing one, on the same version of the code.
+Every report ends with a `reproduce:` line that carries the seed of the run. Passing that seed with `-pbt.seed` repeats the same sequence of cases, including the failing one, on the same version of both the property code and pbt. Updating pbt can change the generated cases for a seed. In v0.3.2 the integer generation fix changes some seeded runs; existing saved choice sequences still replay as before.
 
 The failing case is also saved under `testdata/pbt/<TestName>/<hash>` as a text file with the size, the drawn values as comments, and the choices. Every later `Check` of the same test replays the saved cases before generating new ones and fails if one still fails, so the regression case follows the code into version control. Delete the file to drop the case. Three options adjust this behavior: `NoSave` keeps a run from writing, `NoReplay` skips the saved cases, and `ReplayFile` or `-pbt.replay=FILE` replays one saved file in any test, which is how you hand a case from one test to another or reproduce a failure from a CI log.
 

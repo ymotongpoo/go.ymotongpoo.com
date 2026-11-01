@@ -60,6 +60,8 @@ A property that fails on two or more elements reports `[]int{1, 1}`, with the ot
 
 `NoShrink` marks a value that the shrinker must leave alone. Use it for opaque tokens and for inputs whose shape is fixed by the system under test, where shrinking would only spend time.
 
+A collection can still drop an element generated with `NoShrink`; the elements that remain keep their values.
+
 ```go
 // A token the system under test treats as opaque; shrinking it would only
 // slow the search down.

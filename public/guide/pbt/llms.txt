@@ -2,7 +2,7 @@
 
 > pbt is a property-based testing library for Go with the feature set of Erlang's PropEr: generators whose distribution you control, statistics that check it, stateful and parallel command testing, state machines, targeted search and existential properties. Module path go.ymotongpoo.com/pbt; Apache License 2.0; Go 1.25 or later.
 
-This file indexes the documentation of pbt v0.3.1. Every page of the user guide has a Markdown version at its URL with .md appended, and llms-full.txt holds the whole guide in one file. The package documentation on pkg.go.dev is the reference for every function and option; the repository holds the design notes, the migration guide for rapid users, the changelog and the examples. Stateful tests are written as commands that close over a model and a system kept in the test's variables, with no type parameters; generators are typed, and the type is inferred in nearly every call.
+This file indexes the documentation of pbt v0.3.2. Every page of the user guide has a Markdown version at its URL with .md appended, and llms-full.txt holds the whole guide in one file. The package documentation on pkg.go.dev is the reference for every function and option; the repository holds the design notes, the migration guide for rapid users, the changelog and the examples. Stateful tests are written as commands that close over a model and a system kept in the test's variables, with no type parameters; generators are typed, and the type is inferred in nearly every call.
 
 ## User guide
 

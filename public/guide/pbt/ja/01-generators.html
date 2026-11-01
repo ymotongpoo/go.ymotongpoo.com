@@ -52,7 +52,7 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 <div class="layout">
 <nav class="side">
 <h1><a href="./">pbt 利用ガイド</a></h1>
-<div class="version">pbt v0.3.1</div>
+<div class="version">pbt v0.3.2</div>
 <ol>
 <li><a href="./">はじめに</a></li>
 <li class="current"><a href="01-generators">生成器</a></li>
@@ -170,7 +170,7 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 </span></span><span style="display:flex;"><span>[pbt] reproduce: go test -run &#39;TestDisplayName&#39; -pbt.seed=0x1
 </span></span></code></pre><p>名前は、長さの検査にまだ引っかかる最短の文字列である <code>a</code> 9文字まで縮みました。年齢は失敗に関係しないので0まで縮んでいます。報告はラベル付きの値を3段の深さまで載せ、1つの値を2000文字で切ります。<code>ReportDepth</code> と <code>ReportLimit</code> のオプションで両方を変えられます。</p>
 <h2 id="heading-5">プロパティの外で値を見る</h2>
-<p><code>Example</code> は生成器の値を1つ返します。生成器の出力を手早く確かめるときや、従来のテストでそれらしい入力が必要なときに使います。シードを渡すと値が固定されます。</p>
+<p><code>Example</code> は生成器の値を1つ返します。生成器の出力を手早く確かめるときや、従来のテストでそれらしい入力が必要なときに使います。生成器のコードとpbtのバージョンが同じであれば、シードを渡すと値が固定されます。</p>
 <pre style="background-color:#f7f7f7;-webkit-text-size-adjust:none;"><code><span style="display:flex;"><span><span style="color:#cf222e">func</span><span style="color:#fff"> </span><span style="color:#6639ba">TestExample</span><span style="color:#1f2328">(</span><span style="color:#1f2328">t</span><span style="color:#fff"> </span><span style="color:#0550ae">*</span><span style="color:#1f2328">testing</span><span style="color:#1f2328">.</span><span style="color:#1f2328">T</span><span style="color:#1f2328">)</span><span style="color:#fff"> </span><span style="color:#1f2328">{</span><span style="color:#fff">
 </span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#1f2328">u</span><span style="color:#fff"> </span><span style="color:#0550ae">:=</span><span style="color:#fff"> </span><span style="color:#1f2328">userGen</span><span style="color:#1f2328">.</span><span style="color:#6639ba">Example</span><span style="color:#1f2328">(</span><span style="color:#0550ae">42</span><span style="color:#1f2328">)</span><span style="color:#fff"> </span><span style="color:#57606a">// a sample outside any property; the seed fixes it</span><span style="color:#fff">
 </span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#cf222e">if</span><span style="color:#fff"> </span><span style="color:#1f2328">u</span><span style="color:#1f2328">.</span><span style="color:#1f2328">Age</span><span style="color:#fff"> </span><span style="color:#1f2328">&lt;</span><span style="color:#fff"> </span><span style="color:#0550ae">0</span><span style="color:#fff"> </span><span style="color:#0550ae">||</span><span style="color:#fff"> </span><span style="color:#1f2328">!</span><span style="color:#1f2328">strings</span><span style="color:#1f2328">.</span><span style="color:#6639ba">HasSuffix</span><span style="color:#1f2328">(</span><span style="color:#1f2328">u</span><span style="color:#1f2328">.</span><span style="color:#1f2328">Email</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#0a3069">&#34;@example.com&#34;</span><span style="color:#1f2328">)</span><span style="color:#fff"> </span><span style="color:#1f2328">{</span><span style="color:#fff">
@@ -184,7 +184,7 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 <span>← <a href="./">はじめに</a></span>
 <span><a href="02-distribution">サイズ、分布、統計</a> →</span>
 </div>
-<footer>pbt 利用ガイド for pbt v0.3.1 · <a href="https://github.com/ymotongpoo/pbt/tree/main/docs/guide">source</a> · Apache License 2.0</footer>
+<footer>pbt 利用ガイド for pbt v0.3.2 · <a href="https://github.com/ymotongpoo/pbt/tree/main/docs/guide">source</a> · Apache License 2.0</footer>
 </main>
 </div>
 </body>

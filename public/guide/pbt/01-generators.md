@@ -94,7 +94,7 @@ The name shrank to the shortest string that still breaks the length check, nine 
 
 ## Sampling outside a property
 
-`Example` returns one value of a generator, for a quick look or for a conventional test that needs a plausible input. A seed makes the value stable.
+`Example` returns one value of a generator, for a quick look or for a conventional test that needs a plausible input. A seed makes the value stable for the same generator code and pbt version.
 
 ```go
 func TestExample(t *testing.T) {

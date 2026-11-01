@@ -52,7 +52,7 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 <div class="layout">
 <nav class="side">
 <h1><a href="./">pbt 利用ガイド</a></h1>
-<div class="version">pbt v0.3.1</div>
+<div class="version">pbt v0.3.2</div>
 <ol>
 <li><a href="./">はじめに</a></li>
 <li><a href="01-generators">生成器</a></li>
@@ -189,7 +189,7 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 </span></span></span><span style="display:flex;"><span><span style="color:#1f2328">})</span><span style="color:#fff">
 </span></span></span></code></pre><p><code>MakeCheck</code> はプロパティを <code>func(*testing.T)</code> に包みます。プロパティの表やサブテストに向いています。</p>
 <h2 id="heading-2">ケースを破棄する</h2>
-<p><code>t.Assume(cond)</code> は条件が偽のとき現在のケースを破棄します。PropErの <code>?IMPLIES</code> と同じです。破棄したケースは通過にも失敗にも数えず、<code>Check</code> は別のケースを引きます。<code>Skip</code>、<code>Skipf</code>、<code>SkipNow</code> も同じ働きです。</p>
+<p><code>t.Assume(cond)</code> は条件が偽のとき現在のケースを破棄します。PropErの <code>?IMPLIES</code> と同じです。破棄したケースは通過にも失敗にも数えず、<code>Check</code> は別のケースを引きます。<code>Skip</code>、<code>Skipf</code>、<code>SkipNow</code> も同じ働きです。そのケースですでに失敗を記録していれば、後から破棄しても失敗は残ります。</p>
 <pre style="background-color:#f7f7f7;-webkit-text-size-adjust:none;"><code><span style="display:flex;"><span><span style="color:#cf222e">func</span><span style="color:#fff"> </span><span style="color:#6639ba">TestDivision</span><span style="color:#1f2328">(</span><span style="color:#1f2328">t</span><span style="color:#fff"> </span><span style="color:#0550ae">*</span><span style="color:#1f2328">testing</span><span style="color:#1f2328">.</span><span style="color:#1f2328">T</span><span style="color:#1f2328">)</span><span style="color:#fff"> </span><span style="color:#1f2328">{</span><span style="color:#fff">
 </span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#6639ba">Check</span><span style="color:#1f2328">(</span><span style="color:#1f2328">t</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#cf222e">func</span><span style="color:#1f2328">(</span><span style="color:#1f2328">t</span><span style="color:#fff"> </span><span style="color:#0550ae">*</span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#1f2328">T</span><span style="color:#1f2328">)</span><span style="color:#fff"> </span><span style="color:#1f2328">{</span><span style="color:#fff">
 </span></span></span><span style="display:flex;"><span><span style="color:#fff">		</span><span style="color:#1f2328">a</span><span style="color:#fff"> </span><span style="color:#0550ae">:=</span><span style="color:#fff"> </span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#6639ba">Int</span><span style="color:#1f2328">().</span><span style="color:#6639ba">Draw</span><span style="color:#1f2328">(</span><span style="color:#1f2328">t</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#0a3069">&#34;a&#34;</span><span style="color:#1f2328">)</span><span style="color:#fff">
@@ -203,6 +203,7 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 </span></span></span></code></pre><p>破棄には予算があります。破棄がチェック数の10倍を超えると、最後に破棄した理由を示して実行は失敗します。大半のケースを破棄するプロパティは、主張しているより少ないことしか検査していないからです。<code>Assume(b &gt; 0)</code> より <code>IntMin(1)</code> のように、有効な入力を作る生成器があるならそちらを選んでください。</p>
 <h2 id="heading-3">セットアップとクリーンアップ</h2>
 <p><code>Setup</code> オプションは各ケースの前に関数を実行します。その関数は後片付けの関数を返してもよく、返した関数はケースの後に実行されます。<code>t.Cleanup</code> はプロパティの中から同じ目的の関数を登録します。クリーンアップは、ケースが失敗したかどうかに関係なく、ケースの後に登録と逆の順序で実行されます。</p>
+<p>あるクリーンアップでパニックや破棄が起きても、残りのクリーンアップは実行されます。プロパティがケースを破棄していても、クリーンアップで失敗すればケースは失敗になります。クリーンアップで破棄しても、プロパティの失敗やパニックは消えません。プロパティとクリーンアップの両方でパニックが起きた場合、報告にはプロパティのパニックが残ります。</p>
 <pre style="background-color:#f7f7f7;-webkit-text-size-adjust:none;"><code><span style="display:flex;"><span><span style="color:#cf222e">func</span><span style="color:#fff"> </span><span style="color:#6639ba">TestFileRoundTrip</span><span style="color:#1f2328">(</span><span style="color:#1f2328">t</span><span style="color:#fff"> </span><span style="color:#0550ae">*</span><span style="color:#1f2328">testing</span><span style="color:#1f2328">.</span><span style="color:#1f2328">T</span><span style="color:#1f2328">)</span><span style="color:#fff"> </span><span style="color:#1f2328">{</span><span style="color:#fff">
 </span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#1f2328">dir</span><span style="color:#fff"> </span><span style="color:#0550ae">:=</span><span style="color:#fff"> </span><span style="color:#1f2328">t</span><span style="color:#1f2328">.</span><span style="color:#6639ba">TempDir</span><span style="color:#1f2328">()</span><span style="color:#fff">
 </span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#1f2328">withFile</span><span style="color:#fff"> </span><span style="color:#0550ae">:=</span><span style="color:#fff"> </span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#6639ba">Setup</span><span style="color:#1f2328">(</span><span style="color:#cf222e">func</span><span style="color:#1f2328">(</span><span style="color:#1f2328">t</span><span style="color:#fff"> </span><span style="color:#0550ae">*</span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#1f2328">T</span><span style="color:#1f2328">)</span><span style="color:#fff"> </span><span style="color:#cf222e">func</span><span style="color:#1f2328">()</span><span style="color:#fff"> </span><span style="color:#1f2328">{</span><span style="color:#fff">
@@ -223,7 +224,7 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 </span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#1f2328">},</span><span style="color:#fff"> </span><span style="color:#1f2328">withFile</span><span style="color:#1f2328">)</span><span style="color:#fff">
 </span></span></span><span style="display:flex;"><span><span style="color:#1f2328">}</span><span style="color:#fff">
 </span></span></span></code></pre><h2 id="heading-4">プロパティを組み合わせる</h2>
-<p><code>Conjunction</code> は名前付きの複数のプロパティを同じケースで実行し、失敗したものの名前を示します。<code>Deadline</code> は所定の時間より長くかかったケースを失敗にします。</p>
+<p><code>Conjunction</code> は名前付きの複数のプロパティを同じケースで実行し、失敗したものの名前を示します。後続のプロパティがケースを破棄しても、先行するプロパティの失敗は消えません。<code>Deadline</code> は所定の時間より長くかかったケースを失敗にします。</p>
 <pre style="background-color:#f7f7f7;-webkit-text-size-adjust:none;"><code><span style="display:flex;"><span><span style="color:#cf222e">func</span><span style="color:#fff"> </span><span style="color:#6639ba">TestStringProperties</span><span style="color:#1f2328">(</span><span style="color:#1f2328">t</span><span style="color:#fff"> </span><span style="color:#0550ae">*</span><span style="color:#1f2328">testing</span><span style="color:#1f2328">.</span><span style="color:#1f2328">T</span><span style="color:#1f2328">)</span><span style="color:#fff"> </span><span style="color:#1f2328">{</span><span style="color:#fff">
 </span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#57606a">// Conjunction runs every sub-property on the same case and names the</span><span style="color:#fff">
 </span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#57606a">// ones that fail.</span><span style="color:#fff">
@@ -295,14 +296,14 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 </span></span></span><span style="display:flex;"><span><span style="color:#1f2328">}</span><span style="color:#fff">
 </span></span></span></code></pre><p><code>Recover</code> は関数を実行し、パニックの値か <code>nil</code> を返すので、不正な入力でパニックすることをプロパティで主張できます。<code>NoPanic</code> は関数を受け取り、その引数を <code>Make</code> で生成します。<code>Make</code> は9章で説明します。<code>WithType</code> と <code>WithField</code> のオプションで引数を絞れます。</p>
 <h2 id="heading-7">シード、保存したケース、再実行</h2>
-<p>すべての報告は、実行のシードを含む <code>reproduce:</code> の行で終わります。そのシードを <code>-pbt.seed</code> に渡すと、同じ版のコードの上で、失敗したケースを含む同じケースの列が繰り返されます。</p>
+<p>すべての報告は、実行のシードを含む <code>reproduce:</code> の行で終わります。そのシードを <code>-pbt.seed</code> に渡すと、プロパティのコードとpbtのバージョンが同じであれば、失敗したケースを含む同じケースの列が繰り返されます。pbtを更新すると、同じシードから生成されるケースが変わることがあります。v0.3.2では整数生成の修正により一部のシードで生成結果が変わりますが、既存の保存済み選択列は従来どおり再生されます。</p>
 <p>失敗したケースは <code>testdata/pbt/&lt;テスト名&gt;/&lt;ハッシュ&gt;</code> にもテキストファイルとして保存されます。サイズ、コメントとして取り出した値、そして選択の列が入っています。同じテストの以後の <code>Check</code> は、新しいケースを生成する前に保存済みのケースを再実行し、まだ失敗するなら失敗にします。回帰ケースがコードとともにバージョン管理に入るわけです。ケースを捨てるにはファイルを削除します。この挙動を調整するオプションが3つあります。<code>NoSave</code> は実行に書き込みをさせません。<code>NoReplay</code> は保存済みケースを飛ばします。<code>ReplayFile</code> またはフラグ <code>-pbt.replay=FILE</code> は、どのテストでも保存済みファイルを1つ再実行します。あるテストのケースを別のテストに渡すときや、CIのログにある失敗を手元で再現するときに使います。</p>
 
 <div class="pager">
 <span>← <a href="03-shrinking">縮小</a></span>
 <span><a href="05-stateful">ステートフルテスト</a> →</span>
 </div>
-<footer>pbt 利用ガイド for pbt v0.3.1 · <a href="https://github.com/ymotongpoo/pbt/tree/main/docs/guide">source</a> · Apache License 2.0</footer>
+<footer>pbt 利用ガイド for pbt v0.3.2 · <a href="https://github.com/ymotongpoo/pbt/tree/main/docs/guide">source</a> · Apache License 2.0</footer>
 </main>
 </div>
 </body>

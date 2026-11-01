@@ -82,6 +82,8 @@ var concat = pbt.LetShrink([]pbt.Gen[[]int]{part, part, part}, func(parts [][]in
 不透明なトークンや、テスト対象のシステムが形を決めている入力に使います。
 縮小しても時間を使うだけだからです。
 
+コレクションは `NoShrink` で生成した要素自体を削除できますが、残る要素の値は保たれます。
+
 ```go
 // A token the system under test treats as opaque; shrinking it would only
 // slow the search down.

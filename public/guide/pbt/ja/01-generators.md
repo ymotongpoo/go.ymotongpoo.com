@@ -112,7 +112,7 @@ var displayNameProperty = func(t *pbt.T) {
 
 `Example` は生成器の値を1つ返します。
 生成器の出力を手早く確かめるときや、従来のテストでそれらしい入力が必要なときに使います。
-シードを渡すと値が固定されます。
+生成器のコードとpbtのバージョンが同じであれば、シードを渡すと値が固定されます。
 
 ```go
 func TestExample(t *testing.T) {
