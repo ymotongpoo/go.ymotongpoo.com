@@ -5,9 +5,8 @@ pbtは逐次テストと同じコマンドとモデルでそれを検査しま�
 逐次に実行する前段と、それに続く複数の枝を生成し、枝をゴルーチンで実行し、戻ってきた結果を説明できる枝の交互配置があるかを調べます。
 
 ```go
-// Counter is safe for concurrent use. Every command returns a value the
-// postcondition can check, which is what lets the interleaving check
-// decide whether the concurrent run was explained by some sequential order.
+// Counter is safe for concurrent use. Add returns the new value, which
+// gives the interleaving check a result to explain for every call.
 type Counter struct {
 	mu sync.Mutex
 	n  int
@@ -71,7 +70,10 @@ PropErの `parallel_commands` と同じ方式で、線形化可能性の検査�
 
 ここからコマンドの書き方について3つのことが決まります。
 
-- すべてのコマンドは、事後条件が検査できる値を返さなければなりません。何も返さないコマンドは、検査に説明すべきものを与えません。
+- 更新の効果は、戻り値、後続の照会、または `RunParallel` の後の別の検査で観測できる必要があります。
+  個々のコマンドは何も返さず、`Post` を `nil` にしても構いません。
+  その事後条件は結果を受け入れ、pbtは `Next` を使って候補の順序に沿ってモデルを再生します。
+  観測も追加の検査もなければ、交互配置の検査は、正常に戻るものの効果が誤っている更新を検出できません。
 - 枝は別の枝の結果に依存できません。プログラムの生成時にはどちらも実行されていないからです。各枝は自分の `Var` と前段の `Var` だけを解決します。
 - 枝の `Run` は並行に動くので、モデルに触れてはいけません。`Pre`、`Post`、`Next` はその後にテストのゴルーチンで動き、pbtは候補の順序ごとにモデルを再生します。
 

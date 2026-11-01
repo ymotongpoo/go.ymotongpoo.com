@@ -16,7 +16,7 @@ This file indexes the documentation of pbt v0.3.2. Every page of the user guide 
 - [State machines](https://go.ymotongpoo.com/pbt/guide/07-fsm.md): The fsm package: named states, weighted transitions, state data in the test's variables, and statistics by transition.
 - [Targeted search and existence](https://go.ymotongpoo.com/pbt/guide/08-targeted.md): Maximize and Minimize to steer a run toward a utility, and CheckExists for properties that ask whether a witness exists.
 - [Generators from types](https://go.ymotongpoo.com/pbt/guide/09-types.md): Make and its struct tags, WithType and WithField, generators for recursive types, and pbtgen, which writes generators as source.
-- [Where to go next](https://go.ymotongpoo.com/pbt/guide/10-reference.md): The examples that port the PropEr Testing book, the practical examples, the migration guide for rapid users, the reference material and the flags at a glance.
+- [Where to go next](https://go.ymotongpoo.com/pbt/guide/10-reference.md): The examples that port the PropEr Testing book, the practical examples, the examples of the book on discovering properties, the migration guide for rapid users, the reference material and the flags at a glance.
 
 ## Reference
 
@@ -41,7 +41,7 @@ This file indexes the documentation of pbt v0.3.2. Every page of the user guide 
 - [状態機械](https://go.ymotongpoo.com/pbt/guide/ja/07-fsm.md): fsmパッケージ。名前付きの状態、重み付きの遷移、テストの変数に置く状態データ、遷移ごとの統計。
 - [標的型探索と存在性](https://go.ymotongpoo.com/pbt/guide/ja/08-targeted.md): 効用に向けて実行を導くMaximizeとMinimize、証拠が存在するかを問うプロパティのためのCheckExists。
 - [型から導く生成器](https://go.ymotongpoo.com/pbt/guide/ja/09-types.md): Makeと構造体タグ、WithTypeとWithField、再帰的な型の生成器、生成器をソースとして書き出すpbtgen。
-- [次に読むもの](https://go.ymotongpoo.com/pbt/guide/ja/10-reference.md): PropEr Testingの書籍を移植した例題、実践的な例題、rapid利用者向けの移行ガイド、参照資料、フラグの一覧。
+- [次に読むもの](https://go.ymotongpoo.com/pbt/guide/ja/10-reference.md): PropEr Testingの書籍を移植した例題、実践的な例題、プロパティの発見を扱う本の例題、rapid利用者向けの移行ガイド、参照資料、フラグの一覧。
 
 ## Optional
 

@@ -165,6 +165,9 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 </tbody>
 </table>
 <p>Run <code>go test -v -run Caught ./practical/...</code> inside <code>examples</code> to read the reports of the planted bugs. The README of the directory describes the patterns the examples share.</p>
+<h2 id="the-examples-of-the-discovery-guide">The examples of the discovery guide</h2>
+<p>The directory <a href="https://github.com/ymotongpoo/pbt/tree/main/examples/discovery">examples/discovery</a> holds the Go examples of the Japanese book 『プロパティはどう思いつくのか　プロパティベーステスト発見ガイド』 by Yoshi Yamaguchi. Where the guide explains what each function of pbt does, the book is about finding the properties to write: it derives them from a specification, chapter by chapter, from example tests and algebraic laws to state machines, concurrency and the statistics of a run. Each property is checked against planted bugs.</p>
+<p>A test whose name ends in <code>Mutant</code> runs a property against a planted bug and is supposed to fail, so it skips itself unless <code>PBT_MUTANTS</code> is set. Run <code>go test -race ./discovery/...</code> inside <code>examples</code> for the ordinary tests, and <code>./discovery/run_mutants.sh</code> to check that every planted bug is caught. The README of the directory lists the chapters.</p>
 <h2 id="coming-from-rapid">Coming from rapid</h2>
 <p><a href="https://github.com/ymotongpoo/pbt/blob/main/MIGRATION.md">MIGRATION.md</a> maps rapid's API onto pbt, table by table, and lists what pbt adds. Most rapid tests translate line by line; the stateful tests change shape, because pbt generates the whole sequence against the model before running it. <a href="https://github.com/ymotongpoo/pbt/blob/main/BENCHMARK.md">BENCHMARK.md</a> compares the two libraries on the same properties.</p>
 <h2 id="reference-material">Reference material</h2>

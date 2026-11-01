@@ -185,8 +185,8 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 </tr>
 <tr>
 <td><code>Pre</code></td>
-<td>いまのモデル状態でコマンドが許されるかを示す。別のコマンドが取り除かれた結果として成り立たなくなったコマンドは、縮小の候補にならない</td>
-<td>生成時と、縮小した列の再実行時</td>
+<td>いまのモデル状態でコマンドが許されるかを判定します。</td>
+<td>縮小を含む生成時と実行時</td>
 </tr>
 <tr>
 <td><code>Run</code></td>
@@ -205,6 +205,7 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 </tr>
 </tbody>
 </table>
+<p><code>Pre</code> はコマンドを生成するたびに検査され、偽ならコマンドを引き直します。縮小でコマンドを削除すると、後続のコマンドは新しいモデル状態から再生成されます。試行回数の上限までに条件を満たすコマンドが見つからなければ、列を終了し、最小の長さに達していない場合はケースを破棄します。<code>RunSequential</code> は各呼び出しの前にも <code>Pre</code> を検査し、偽ならケースを失敗にします。実行時に偽になるのは、通常、モデルの初期化漏れや、<code>init</code> と <code>Next</code> 以外でのモデルの変更を意味します。</p>
 <p><code>pbt.Commands(init, gen)</code> はプログラムの生成器です。<code>init</code> はモデルを初期状態に戻す関数で、pbtは生成の前と実行の前に毎回これを呼びます。そのためモデルの変数をコピーする必要はありません。<code>Next</code> はその場で書き換え、再生は <code>init</code> からやり直します。関数 <code>gen</code> は、いまのモデル状態に対する次のコマンドの生成器を返します。何が可能で、どれくらいの頻度かを決める場所です。<code>close</code> はチケットが開いている間だけ提示され、<code>Frequency</code> が混合比を決めます。<code>pbt.W</code> は重みと生成器を組にします。コマンドの生成器の型は <code>pbt.CommandGen</code> で、<code>pbt.Gen[pbt.Command]</code> の別名です。Goは <code>Map</code> や <code>Frequency</code> の呼び出しでは型引数を推論しますが、自分で宣言する関数の署名では推論しないので、そこにはこの別名を書きます。オプション <code>pbt.Length(min, max)</code> は列の長さを制限し、<code>pbt.NoCommands()</code> を返す生成器は列を終え、<code>pbt.ModelState(f)</code> はモデルを表示する関数を報告に渡します。<code>RunSequential</code> はプログラムを実行し、各事後条件を検査し、統計のためにすべてのコマンド名を記録します。通過した実行では、各コマンドが何回動いたかが表示されます。</p>
 <h2 id="heading-3">失敗を読む</h2>
 <p>次のキューはクローズしたチケットを取り除き忘れるので、<code>Open</code> がそれを数え続けます。</p>
@@ -232,11 +233,11 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 </span></span><span style="display:flex;"><span>[pbt] log: model state before step 3: []
 </span></span><span style="display:flex;"><span>[pbt] error: step 3: postcondition of open() failed: 1 open tickets, want 0
 </span></span><span style="display:flex;"><span>[pbt] reproduce: go test -run &#39;TestQueue&#39; -pbt.seed=0x1
-</span></span></code></pre><p>最初に失敗した列には、発行とクローズが何回も含まれていました。縮小器はコマンドを1つずつ取り除き、そのたびに事前条件を検査し直して、3つが残るまで続けました。漏れを示す最短のプログラムです。失敗は検査の種類とコマンド、つまり「postcondition of open」で区別されるので、縮小が別の失敗にすり替わることはありません。</p>
+</span></span></code></pre><p>最初に失敗した列には、発行とクローズが何回も含まれていました。縮小器はコマンドを1つずつ取り除き、そのたびに後続のコマンドを新しいモデル状態から再生成して事前条件を検査し、3つが残るまで続けました。漏れを示す最短のプログラムです。失敗は検査の種類とコマンド、つまり「postcondition of open」で区別されるので、縮小が別の失敗にすり替わることはありません。</p>
 <h2 id="heading-4">良いモデルの書き方</h2>
 <p>モデルを変更するのは <code>init</code> と <code>Next</code> だけにしてください。<code>Pre</code>、<code>Post</code>、<code>gen</code> はモデルを読むだけです。pbtは <code>init</code> を呼んでから各コマンドの <code>Next</code> を順に呼ぶことで列を再生するので、それ以外の場所で加えた変更は再生時に失われます。<code>init</code> が戻し忘れた値は、前のケースから次のケースへ漏れてしまいます。</p>
 <p>モデルはシステムより単純に保ってください。検査できる言葉でシステムがすべきことを述べるのが目的で、システムを作り直すことではありません。</p>
-<p>コマンドは <code>Pre</code> で拒否するより、状態から選んでください。頻繁に失敗する事前条件は生成したコマンドを無駄にしますが、状態に合ったコマンドを提示する生成器は何も無駄にしません。<code>Pre</code> は縮小に必要な検査として残します。</p>
+<p>コマンドは <code>Pre</code> で拒否するより、状態から選んでください。頻繁に失敗する事前条件は生成したコマンドを無駄にしますが、状態に合ったコマンドを提示する生成器は何も無駄にしません。条件は <code>Pre</code> にも宣言してください。現在のモデル状態でその条件を満たすコマンドだけを生成するなら、縮小を含む逐次の生成過程で <code>Pre</code> が候補を拒否することはありません。生成器だけでは条件を保証しない場合、<code>Pre</code> が不適切な候補を拒否します。<code>ParallelCommands</code> も <code>Pre</code> を使い、すべての交互配置が事前条件を満たすまで枝の末尾からコマンドを取り除きます。</p>
 <p>統計も見てください。<code>RunSequential</code> はすべてのコマンド名を記録するので、通過した実行を見れば、コマンドの混合比が意図どおりかが分かります。</p>
 
 <div class="pager">
