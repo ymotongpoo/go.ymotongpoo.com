@@ -1,0 +1,55 @@
+public/guide/pbt/02-distribution.html
+  s_c8f7da6c5b5728::t_20092b1991eecf 97,130,141-142
+public/guide/pbt/02-distribution.md
+  s_c8f7da6c5b5728::t_1613e0804c860f 32,76,92,94
+public/guide/pbt/05-stateful.html
+  s_c8f7da6c5b5728::t_fc6dee911b4fab 174,206,211
+public/guide/pbt/05-stateful.md
+  s_c8f7da6c5b5728::t_2ce937466d54d3 114,156,162
+public/guide/pbt/06-parallel.html
+  s_c8f7da6c5b5728::t_7a14e53ec71f05 76-77,119
+public/guide/pbt/06-parallel.md
+  s_c8f7da6c5b5728::t_a50920b5112555 6-7,58
+public/guide/pbt/10-reference.html
+  s_c8f7da6c5b5728::t_d4df6d736f26ac 168-170
+public/guide/pbt/10-reference.md
+  s_c8f7da6c5b5728::t_4bf2ae29771fbe 34-39
+public/guide/pbt/ja/02-distribution.html
+  s_c8f7da6c5b5728::t_a71939eba42dc1 97,130,141-142
+public/guide/pbt/ja/02-distribution.md
+  s_c8f7da6c5b5728::t_0051cc57cc6769 43-45,94-98,116,119,121-122
+public/guide/pbt/ja/05-stateful.html
+  s_c8f7da6c5b5728::t_5fa76c20317403 188-189,208,236,240
+public/guide/pbt/ja/05-stateful.md
+  s_c8f7da6c5b5728::t_45caad89b8991f 126,131-136,187,203-206
+public/guide/pbt/ja/06-parallel.html
+  s_c8f7da6c5b5728::t_6a4e9f542ad099 76-77,119
+public/guide/pbt/ja/06-parallel.md
+  s_c8f7da6c5b5728::t_e59fcb2e7df1b2 8-9,73-76
+public/guide/pbt/ja/10-reference.html
+  s_c8f7da6c5b5728::t_4a1600909e63e0 177-179,182,189
+public/guide/pbt/ja/10-reference.md
+  s_c8f7da6c5b5728::t_5fe3f2056983a7 43-54
+public/guide/pbt/ja/llms-full.txt
+  s_c8f7da6c5b5728::t_05ae5e1db61660 309-311,360-364,382,385,387-388,936,941-946,997,1013-1016,1030-1031,1095-1098,1474-1485
+public/guide/pbt/llms-full.txt
+  s_c8f7da6c5b5728::t_31f15dc9936339 247,291,307,309,761,803,809,819-820,871,1176-1181
+public/guide/pbt/llms.txt
+  s_c8f7da6c5b5728::t_bee428b20a135d 19,44
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c365d6a804bad14d54ed964cd5eb81a63eac23b0",
+  "prompts": {},
+  "sessions": {
+    "s_c8f7da6c5b5728": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f4deb562-634f-4986-94f8-a902be61674d",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Yoshi Yamaguchi <ymotongpoo@gmail.com>"
+    }
+  }
+}
