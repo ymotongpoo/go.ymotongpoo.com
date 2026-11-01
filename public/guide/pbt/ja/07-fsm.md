@@ -48,7 +48,7 @@ func accountProperty(t *pbt.T) {
 			return nil
 		}
 	}
-	command := func(name string, call func() error, want error) pbt.Gen[pbt.Command] {
+	command := func(name string, call func() error, want error) pbt.CommandGen {
 		return pbt.Just(pbt.Command{Name: name, Run: func(pbt.Env) any { return call() }, Post: expect(want)})
 	}
 	transitions := func(state string) []fsm.Transition {
@@ -80,6 +80,7 @@ func TestAccountMachine(t *testing.T) {
 ```
 
 各 `Transition` は `Weight`、遷移先の状態 `To`、そしてコマンドの生成器 `Cmd` を持ちます。
+`Cmd` の型は `pbt.CommandGen` です。
 コマンドの `Pre`、`Next`、`Post` が見るのは状態データです。
 名前を動かすのはパッケージです。
 `verified` での2回目の `verify` のように同じ状態にとどまる遷移は、拒否されるべき操作を機械で検査する方法です。

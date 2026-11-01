@@ -71,7 +71,7 @@ func queueProperty(newQueue func() ticketQueue) pbt.Property {
 			Run:  func(pbt.Env) any { return q.Issue() },
 			Next: func(v pbt.Var) { open = append(open, v) },
 		})
-		closeTicket := func() pbt.Gen[pbt.Command] {
+		closeTicket := func() pbt.CommandGen {
 			return pbt.Map(pbt.SampledFrom(open), func(v pbt.Var) pbt.Command {
 				return pbt.Command{
 					Name: "close", Args: []any{v},
@@ -99,7 +99,7 @@ func queueProperty(newQueue func() ticketQueue) pbt.Property {
 		})
 		// commands chooses the next command from the model: close is only
 		// offered while a ticket is open.
-		commands := func() pbt.Gen[pbt.Command] {
+		commands := func() pbt.CommandGen {
 			if len(open) == 0 {
 				return pbt.OneOf(issue, count)
 			}
@@ -136,6 +136,8 @@ func TestQueue(t *testing.T) {
 何が可能で、どれくらいの頻度かを決める場所です。
 `close` はチケットが開いている間だけ提示され、`Frequency` が混合比を決めます。
 `pbt.W` は重みと生成器を組にします。
+コマンドの生成器の型は `pbt.CommandGen` で、`pbt.Gen[pbt.Command]` の別名です。
+Goは `Map` や `Frequency` の呼び出しでは型引数を推論しますが、自分で宣言する関数の署名では推論しないので、そこにはこの別名を書きます。
 オプション `pbt.Length(min, max)` は列の長さを制限し、`pbt.NoCommands()` を返す生成器は列を終え、`pbt.ModelState(f)` はモデルを表示する関数を報告に渡します。
 `RunSequential` はプログラムを実行し、各事後条件を検査し、統計のためにすべてのコマンド名を記録します。
 通過した実行では、各コマンドが何回動いたかが表示されます。

@@ -1,4 +1,4 @@
-# pbt 利用ガイド（v0.3.0）
+# pbt 利用ガイド（v0.3.1）
 
 > Goのプロパティベーステストライブラリpbtの利用ガイドを1つのファイルにまとめたものです。文書の索引は https://go.ymotongpoo.com/pbt/guide/llms.txt にあります。
 
@@ -12,7 +12,7 @@ pbtは入力を生成し、失敗した入力を小さなケースへ縮小し�
 機能の範囲はErlangの[PropEr](https://proper-testing.github.io/)に合わせています。
 分布を利用者が制御できる生成器、その制御を確かめる統計、モデルに対するステートフルテストと並行テスト、状態機械、標的型探索、存在性のプロパティです。
 
-このガイドはpbt v0.3.0を対象にしています。
+このガイドはpbt v0.3.1を対象にしています。
 `go test` でテストを書いていることを前提にしています。
 関数ごとの説明は[パッケージドキュメント](https://pkg.go.dev/go.ymotongpoo.com/pbt)にあります。
 ここでは、部品どうしがどう組み合わさるか、どの場面でどれを使うかを説明します。
@@ -20,7 +20,7 @@ pbtは入力を生成し、失敗した入力を小さなケースへ縮小し�
 ## インストール
 
 ```sh
-go get go.ymotongpoo.com/pbt@v0.3.0
+go get go.ymotongpoo.com/pbt@v0.3.1
 ```
 
 pbtはGo 1.25以降で動き、標準ライブラリ以外に依存しません。
@@ -864,7 +864,7 @@ func queueProperty(newQueue func() ticketQueue) pbt.Property {
 			Run:  func(pbt.Env) any { return q.Issue() },
 			Next: func(v pbt.Var) { open = append(open, v) },
 		})
-		closeTicket := func() pbt.Gen[pbt.Command] {
+		closeTicket := func() pbt.CommandGen {
 			return pbt.Map(pbt.SampledFrom(open), func(v pbt.Var) pbt.Command {
 				return pbt.Command{
 					Name: "close", Args: []any{v},
@@ -892,7 +892,7 @@ func queueProperty(newQueue func() ticketQueue) pbt.Property {
 		})
 		// commands chooses the next command from the model: close is only
 		// offered while a ticket is open.
-		commands := func() pbt.Gen[pbt.Command] {
+		commands := func() pbt.CommandGen {
 			if len(open) == 0 {
 				return pbt.OneOf(issue, count)
 			}
@@ -929,6 +929,8 @@ func TestQueue(t *testing.T) {
 何が可能で、どれくらいの頻度かを決める場所です。
 `close` はチケットが開いている間だけ提示され、`Frequency` が混合比を決めます。
 `pbt.W` は重みと生成器を組にします。
+コマンドの生成器の型は `pbt.CommandGen` で、`pbt.Gen[pbt.Command]` の別名です。
+Goは `Map` や `Frequency` の呼び出しでは型引数を推論しますが、自分で宣言する関数の署名では推論しないので、そこにはこの別名を書きます。
 オプション `pbt.Length(min, max)` は列の長さを制限し、`pbt.NoCommands()` を返す生成器は列を終え、`pbt.ModelState(f)` はモデルを表示する関数を報告に渡します。
 `RunSequential` はプログラムを実行し、各事後条件を検査し、統計のためにすべてのコマンド名を記録します。
 通過した実行では、各コマンドが何回動いたかが表示されます。
@@ -1031,7 +1033,7 @@ func TestCounterParallel(t *testing.T) {
 				},
 			}
 		})
-		commands := func() pbt.Gen[pbt.Command] { return add }
+		commands := func() pbt.CommandGen { return add }
 		prog := pbt.ParallelCommands(func() { n = 0 }, commands).Draw(t, "cmds")
 		prog.RunParallel(t)
 	})
@@ -1131,7 +1133,7 @@ func accountProperty(t *pbt.T) {
 			return nil
 		}
 	}
-	command := func(name string, call func() error, want error) pbt.Gen[pbt.Command] {
+	command := func(name string, call func() error, want error) pbt.CommandGen {
 		return pbt.Just(pbt.Command{Name: name, Run: func(pbt.Env) any { return call() }, Post: expect(want)})
 	}
 	transitions := func(state string) []fsm.Transition {
@@ -1163,6 +1165,7 @@ func TestAccountMachine(t *testing.T) {
 ```
 
 各 `Transition` は `Weight`、遷移先の状態 `To`、そしてコマンドの生成器 `Cmd` を持ちます。
+`Cmd` の型は `pbt.CommandGen` です。
 コマンドの `Pre`、`Next`、`Post` が見るのは状態データです。
 名前を動かすのはパッケージです。
 `verified` での2回目の `verify` のように同じ状態にとどまる遷移は、拒否されるべき操作を機械で検査する方法です。

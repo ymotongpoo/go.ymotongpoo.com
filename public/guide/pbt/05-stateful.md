@@ -62,7 +62,7 @@ func queueProperty(newQueue func() ticketQueue) pbt.Property {
 			Run:  func(pbt.Env) any { return q.Issue() },
 			Next: func(v pbt.Var) { open = append(open, v) },
 		})
-		closeTicket := func() pbt.Gen[pbt.Command] {
+		closeTicket := func() pbt.CommandGen {
 			return pbt.Map(pbt.SampledFrom(open), func(v pbt.Var) pbt.Command {
 				return pbt.Command{
 					Name: "close", Args: []any{v},
@@ -90,7 +90,7 @@ func queueProperty(newQueue func() ticketQueue) pbt.Property {
 		})
 		// commands chooses the next command from the model: close is only
 		// offered while a ticket is open.
-		commands := func() pbt.Gen[pbt.Command] {
+		commands := func() pbt.CommandGen {
 			if len(open) == 0 {
 				return pbt.OneOf(issue, count)
 			}
@@ -116,7 +116,7 @@ A command is a `pbt.Command` value, a struct of functions.
 - `Next` updates the model for the command. It receives the result as a `Var`, during generation and during execution alike, which keeps the model free of real values and lets the shrinker regenerate the sequence.
 - `Post` checks the real result against the model state before the command. It runs during execution only.
 
-`pbt.Commands(init, gen)` is a generator of programs. `init` puts the model in its initial state, and pbt calls it before every generation and every run, so the variables of the model need no copying: `Next` changes them in place, and a replay starts again from `init`. The function `gen` returns the generator of the next command for the current state of the model, which is where you decide what is possible and how likely it is: `close` is only offered while a ticket is open, and a `Frequency` sets the mix, with `pbt.W` pairing each weight with its generator. The option `pbt.Length(min, max)` bounds the length of the sequence, a generator that returns `pbt.NoCommands()` ends it, and `pbt.ModelState(f)` gives the report a function that shows the model. `RunSequential` executes the program, checks each postcondition, and records the name of every command for the statistics, so a passing run prints how often each command ran.
+`pbt.Commands(init, gen)` is a generator of programs. `init` puts the model in its initial state, and pbt calls it before every generation and every run, so the variables of the model need no copying: `Next` changes them in place, and a replay starts again from `init`. The function `gen` returns the generator of the next command for the current state of the model, which is where you decide what is possible and how likely it is: `close` is only offered while a ticket is open, and a `Frequency` sets the mix, with `pbt.W` pairing each weight with its generator. The type of a command generator is `pbt.CommandGen`, an alias of `pbt.Gen[pbt.Command]`: Go infers the type argument in a call to `Map` or `Frequency` but not in the signature of a function you declare, and the alias is the name to write there. The option `pbt.Length(min, max)` bounds the length of the sequence, a generator that returns `pbt.NoCommands()` ends it, and `pbt.ModelState(f)` gives the report a function that shows the model. `RunSequential` executes the program, checks each postcondition, and records the name of every command for the statistics, so a passing run prints how often each command ran.
 
 ## Reading a failure
 
