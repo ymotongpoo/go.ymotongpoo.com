@@ -1,0 +1,29 @@
+public/guide/pbt/10-reference.html
+  s_c8f7da6c5b5728::t_17b26288570c42 169
+public/guide/pbt/10-reference.md
+  s_c8f7da6c5b5728::t_9cf824ad578b93 36
+public/guide/pbt/ja/10-reference.html
+  s_c8f7da6c5b5728::t_25cd0d7b8536ab 178
+public/guide/pbt/ja/10-reference.md
+  s_c8f7da6c5b5728::t_057580dd6308a8 45-46
+public/guide/pbt/ja/llms-full.txt
+  s_c8f7da6c5b5728::t_4838f78533ed47 1476-1477
+public/guide/pbt/llms-full.txt
+  s_c8f7da6c5b5728::t_cef9d9d4cd115e 1178
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "be55c1dbaff90605ecae9f22a494dcb55b7ed354",
+  "prompts": {},
+  "sessions": {
+    "s_c8f7da6c5b5728": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f4deb562-634f-4986-94f8-a902be61674d",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Yoshi Yamaguchi <ymotongpoo@gmail.com>"
+    }
+  }
+}
