@@ -81,6 +81,13 @@ carries a `Link` header with `rel="describedby"` pointing at the module's
 `llms.txt`, and a `Content-Signal` of `search=yes, ai-input=yes`. The
 training signal is left unstated on purpose.
 
+Each Markdown page with a matching HTML file also carries a `Link` header
+with `rel="canonical"` pointing to the public HTML URL. The generator writes
+these rules for both the public URL and the storage URL under `/guide/`.
+It discovers the pages on each run, so newly copied documentation gets the
+same headers. Run `go test ./...` to check the targets against the HTML
+canonical links and check the limit of 100 header rules.
+
 ## License
 
 Apache License 2.0; see [LICENSE.md](LICENSE.md).
