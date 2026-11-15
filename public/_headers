@@ -18,3 +18,91 @@
 /pbt/guide/*
   Link: </pbt/llms.txt>; rel="describedby"; type="text/markdown"
   Content-Signal: search=yes, ai-input=yes
+/pbt/guide/01-generators.md
+  Link: <https://go.ymotongpoo.com/pbt/guide/01-generators>; rel="canonical"
+/guide/pbt/01-generators.md
+  Link: <https://go.ymotongpoo.com/pbt/guide/01-generators>; rel="canonical"
+/pbt/guide/02-distribution.md
+  Link: <https://go.ymotongpoo.com/pbt/guide/02-distribution>; rel="canonical"
+/guide/pbt/02-distribution.md
+  Link: <https://go.ymotongpoo.com/pbt/guide/02-distribution>; rel="canonical"
+/pbt/guide/03-shrinking.md
+  Link: <https://go.ymotongpoo.com/pbt/guide/03-shrinking>; rel="canonical"
+/guide/pbt/03-shrinking.md
+  Link: <https://go.ymotongpoo.com/pbt/guide/03-shrinking>; rel="canonical"
+/pbt/guide/04-properties.md
+  Link: <https://go.ymotongpoo.com/pbt/guide/04-properties>; rel="canonical"
+/guide/pbt/04-properties.md
+  Link: <https://go.ymotongpoo.com/pbt/guide/04-properties>; rel="canonical"
+/pbt/guide/05-stateful.md
+  Link: <https://go.ymotongpoo.com/pbt/guide/05-stateful>; rel="canonical"
+/guide/pbt/05-stateful.md
+  Link: <https://go.ymotongpoo.com/pbt/guide/05-stateful>; rel="canonical"
+/pbt/guide/06-parallel.md
+  Link: <https://go.ymotongpoo.com/pbt/guide/06-parallel>; rel="canonical"
+/guide/pbt/06-parallel.md
+  Link: <https://go.ymotongpoo.com/pbt/guide/06-parallel>; rel="canonical"
+/pbt/guide/07-fsm.md
+  Link: <https://go.ymotongpoo.com/pbt/guide/07-fsm>; rel="canonical"
+/guide/pbt/07-fsm.md
+  Link: <https://go.ymotongpoo.com/pbt/guide/07-fsm>; rel="canonical"
+/pbt/guide/08-targeted.md
+  Link: <https://go.ymotongpoo.com/pbt/guide/08-targeted>; rel="canonical"
+/guide/pbt/08-targeted.md
+  Link: <https://go.ymotongpoo.com/pbt/guide/08-targeted>; rel="canonical"
+/pbt/guide/09-types.md
+  Link: <https://go.ymotongpoo.com/pbt/guide/09-types>; rel="canonical"
+/guide/pbt/09-types.md
+  Link: <https://go.ymotongpoo.com/pbt/guide/09-types>; rel="canonical"
+/pbt/guide/10-reference.md
+  Link: <https://go.ymotongpoo.com/pbt/guide/10-reference>; rel="canonical"
+/guide/pbt/10-reference.md
+  Link: <https://go.ymotongpoo.com/pbt/guide/10-reference>; rel="canonical"
+/pbt/guide/index.md
+  Link: <https://go.ymotongpoo.com/pbt/guide/>; rel="canonical"
+/guide/pbt/index.md
+  Link: <https://go.ymotongpoo.com/pbt/guide/>; rel="canonical"
+/pbt/guide/ja/01-generators.md
+  Link: <https://go.ymotongpoo.com/pbt/guide/ja/01-generators>; rel="canonical"
+/guide/pbt/ja/01-generators.md
+  Link: <https://go.ymotongpoo.com/pbt/guide/ja/01-generators>; rel="canonical"
+/pbt/guide/ja/02-distribution.md
+  Link: <https://go.ymotongpoo.com/pbt/guide/ja/02-distribution>; rel="canonical"
+/guide/pbt/ja/02-distribution.md
+  Link: <https://go.ymotongpoo.com/pbt/guide/ja/02-distribution>; rel="canonical"
+/pbt/guide/ja/03-shrinking.md
+  Link: <https://go.ymotongpoo.com/pbt/guide/ja/03-shrinking>; rel="canonical"
+/guide/pbt/ja/03-shrinking.md
+  Link: <https://go.ymotongpoo.com/pbt/guide/ja/03-shrinking>; rel="canonical"
+/pbt/guide/ja/04-properties.md
+  Link: <https://go.ymotongpoo.com/pbt/guide/ja/04-properties>; rel="canonical"
+/guide/pbt/ja/04-properties.md
+  Link: <https://go.ymotongpoo.com/pbt/guide/ja/04-properties>; rel="canonical"
+/pbt/guide/ja/05-stateful.md
+  Link: <https://go.ymotongpoo.com/pbt/guide/ja/05-stateful>; rel="canonical"
+/guide/pbt/ja/05-stateful.md
+  Link: <https://go.ymotongpoo.com/pbt/guide/ja/05-stateful>; rel="canonical"
+/pbt/guide/ja/06-parallel.md
+  Link: <https://go.ymotongpoo.com/pbt/guide/ja/06-parallel>; rel="canonical"
+/guide/pbt/ja/06-parallel.md
+  Link: <https://go.ymotongpoo.com/pbt/guide/ja/06-parallel>; rel="canonical"
+/pbt/guide/ja/07-fsm.md
+  Link: <https://go.ymotongpoo.com/pbt/guide/ja/07-fsm>; rel="canonical"
+/guide/pbt/ja/07-fsm.md
+  Link: <https://go.ymotongpoo.com/pbt/guide/ja/07-fsm>; rel="canonical"
+/pbt/guide/ja/08-targeted.md
+  Link: <https://go.ymotongpoo.com/pbt/guide/ja/08-targeted>; rel="canonical"
+/guide/pbt/ja/08-targeted.md
+  Link: <https://go.ymotongpoo.com/pbt/guide/ja/08-targeted>; rel="canonical"
+/pbt/guide/ja/09-types.md
+  Link: <https://go.ymotongpoo.com/pbt/guide/ja/09-types>; rel="canonical"
+/guide/pbt/ja/09-types.md
+  Link: <https://go.ymotongpoo.com/pbt/guide/ja/09-types>; rel="canonical"
+/pbt/guide/ja/10-reference.md
+  Link: <https://go.ymotongpoo.com/pbt/guide/ja/10-reference>; rel="canonical"
+/guide/pbt/ja/10-reference.md
+  Link: <https://go.ymotongpoo.com/pbt/guide/ja/10-reference>; rel="canonical"
+/pbt/guide/ja/index.md
+  Link: <https://go.ymotongpoo.com/pbt/guide/ja/>; rel="canonical"
+/guide/pbt/ja/index.md
+  Link: <https://go.ymotongpoo.com/pbt/guide/ja/>; rel="canonical"

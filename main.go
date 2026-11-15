@@ -20,6 +20,7 @@ import (
 	"embed"
 	"fmt"
 	"html/template"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
@@ -59,6 +60,7 @@ type docs struct {
 	LlmsTxt  bool     // guide/llms.txt exists
 	LlmsFull bool     // guide/llms-full.txt exists
 	FullIn   []string // the languages that have their own llms-full.txt
+	Markdown []string // Markdown pages with a corresponding HTML page
 }
 
 // view is what the templates receive for a module.
@@ -169,6 +171,25 @@ func inspectDocs(m module) (docs, error) {
 	sort.Strings(d.FullIn)
 	d.LlmsTxt = exists(dir, "llms.txt")
 	d.LlmsFull = exists(dir, "llms-full.txt")
+	if err := filepath.WalkDir(dir, func(path string, entry fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() || !strings.HasSuffix(path, ".md") {
+			return nil
+		}
+		if !exists(strings.TrimSuffix(path, ".md") + ".html") {
+			return nil
+		}
+		rel, err := filepath.Rel(dir, path)
+		if err != nil {
+			return err
+		}
+		d.Markdown = append(d.Markdown, filepath.ToSlash(rel))
+		return nil
+	}); err != nil {
+		return d, err
+	}
 	return d, nil
 }
 
@@ -264,6 +285,17 @@ func headers(views []view) string {
 			fmt.Fprintf(&b, "  Link: </%s/llms.txt>; rel=\"describedby\"; type=\"text/markdown\"\n", v.Path)
 		}
 		b.WriteString("  Content-Signal: search=yes, ai-input=yes\n")
+		for _, md := range v.Markdown {
+			page := strings.TrimSuffix(md, ".md")
+			if filepath.Base(md) == "index.md" {
+				page = strings.TrimSuffix(md, "index.md")
+			}
+			canonical := "https://" + host + "/" + v.Path + "/guide/" + page
+			// Include both the public URL and the storage URL used by the rewrite.
+			for _, prefix := range []string{"/" + v.Path + "/guide/", "/guide/" + v.Path + "/"} {
+				fmt.Fprintf(&b, "%s%s\n  Link: <%s>; rel=\"canonical\"\n", prefix, md, canonical)
+			}
+		}
 	}
 	return b.String()
 }
