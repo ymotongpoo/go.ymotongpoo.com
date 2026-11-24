@@ -52,7 +52,7 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 <div class="layout">
 <nav class="side">
 <h1><a href="./">pbt user guide</a></h1>
-<div class="version">pbt v0.3.3</div>
+<div class="version">pbt v0.4.0</div>
 <ol>
 <li><a href="./">Getting started</a></li>
 <li><a href="01-generators">Generators</a></li>
@@ -64,7 +64,8 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 <li><a href="07-fsm">State machines</a></li>
 <li><a href="08-targeted">Targeted search and existence</a></li>
 <li><a href="09-types">Generators from types</a></li>
-<li><a href="10-reference">Where to go next</a></li>
+<li><a href="10-formats">Standard formats</a></li>
+<li><a href="11-reference">Where to go next</a></li>
 </ol>
 <div class="lang"><a href="ja/02-distribution">日本語</a></div>
 <div class="lang"><a href="https://pkg.go.dev/go.ymotongpoo.com/pbt">pkg.go.dev</a> · <a href="https://github.com/ymotongpoo/pbt">GitHub</a></div>
@@ -147,12 +148,49 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 </span></span></span></code></pre><pre style="background-color:#f7f7f7;-webkit-text-size-adjust:none;"><code><span style="display:flex;"><span>[pbt] insufficient coverage:
 </span></span><span style="display:flex;"><span>[pbt]   round hundred: 17.6% of 125 cases, required 30.0%
 </span></span></code></pre><p>The run stopped after 125 cases, once the interval excluded 30%. The observed share also says something about <code>IntRange</code>: 0 is a boundary value, so it occurs far more often than one case in a thousand. Statistics are how you find that out, and <code>Frequency</code> or <code>SampledFrom</code> are how you change it when a uniform spread is what the property needs.</p>
+<h2 id="health-checks">Health checks</h2>
+<p>Statistics answer the questions you ask. Health checks answer the ones you might not think of: whether the run spends its cases well. <code>Check</code> watches every run and warns about three problems with the input.</p>
+<table>
+<thead>
+<tr>
+<th>Check</th>
+<th>Warns when</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>HealthFilter</code></td>
+<td>half of the cases, and at least 20, are discarded by <code>Assume</code>, <code>Skip</code> or a <code>Filter</code> that gave up; or a <code>Filter</code> rejects nine values in ten over at least 100</td>
+</tr>
+<tr>
+<td><code>HealthLarge</code></td>
+<td>a fifth of the cases draw more than 10,000 choices</td>
+</tr>
+<tr>
+<td><code>HealthSlow</code></td>
+<td>drawing the values takes 10 ms per case and a second in all, not counting the property's own work</td>
+</tr>
+</tbody>
+</table>
+<p>A property that keeps only long strings shows the first one.</p>
+<pre style="background-color:#f7f7f7;-webkit-text-size-adjust:none;"><code><span style="display:flex;"><span><span style="color:#57606a">// Most strings that String draws at small sizes are shorter than eight</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#57606a">// runes, so Assume throws most cases away.</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#cf222e">var</span><span style="color:#fff"> </span><span style="color:#1f2328">longNameProperty</span><span style="color:#fff"> </span><span style="color:#1f2328">=</span><span style="color:#fff"> </span><span style="color:#cf222e">func</span><span style="color:#1f2328">(</span><span style="color:#1f2328">t</span><span style="color:#fff"> </span><span style="color:#0550ae">*</span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#1f2328">T</span><span style="color:#1f2328">)</span><span style="color:#fff"> </span><span style="color:#1f2328">{</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#1f2328">name</span><span style="color:#fff"> </span><span style="color:#0550ae">:=</span><span style="color:#fff"> </span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#6639ba">String</span><span style="color:#1f2328">().</span><span style="color:#6639ba">Draw</span><span style="color:#1f2328">(</span><span style="color:#1f2328">t</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#0a3069">&#34;name&#34;</span><span style="color:#1f2328">)</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#1f2328">t</span><span style="color:#1f2328">.</span><span style="color:#6639ba">Assume</span><span style="color:#1f2328">(</span><span style="color:#6639ba">len</span><span style="color:#1f2328">([]</span><span style="color:#6639ba">rune</span><span style="color:#1f2328">(</span><span style="color:#1f2328">name</span><span style="color:#1f2328">))</span><span style="color:#fff"> </span><span style="color:#0550ae">&gt;=</span><span style="color:#fff"> </span><span style="color:#0550ae">8</span><span style="color:#1f2328">)</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#cf222e">if</span><span style="color:#fff"> </span><span style="color:#1f2328">short</span><span style="color:#fff"> </span><span style="color:#0550ae">:=</span><span style="color:#fff"> </span><span style="color:#1f2328">[]</span><span style="color:#6639ba">rune</span><span style="color:#1f2328">(</span><span style="color:#1f2328">name</span><span style="color:#1f2328">)[:</span><span style="color:#0550ae">8</span><span style="color:#1f2328">];</span><span style="color:#fff"> </span><span style="color:#6639ba">len</span><span style="color:#1f2328">(</span><span style="color:#1f2328">short</span><span style="color:#1f2328">)</span><span style="color:#fff"> </span><span style="color:#0550ae">!=</span><span style="color:#fff"> </span><span style="color:#0550ae">8</span><span style="color:#fff"> </span><span style="color:#1f2328">{</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">		</span><span style="color:#1f2328">t</span><span style="color:#1f2328">.</span><span style="color:#6639ba">Fatalf</span><span style="color:#1f2328">(</span><span style="color:#0a3069">&#34;prefix %q&#34;</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#6639ba">string</span><span style="color:#1f2328">(</span><span style="color:#1f2328">short</span><span style="color:#1f2328">))</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#1f2328">}</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#1f2328">}</span><span style="color:#fff">
+</span></span></span></code></pre><pre style="background-color:#f7f7f7;-webkit-text-size-adjust:none;"><code><span style="display:flex;"><span>[pbt] health: HealthFilter: 629 of 729 cases were discarded; most by Assume at health_test.go:18 (629) (CheckHealth(HealthFilter) makes this fail; IgnoreHealth(HealthFilter) hides it)
+</span></span></code></pre><p>The run passed, but it ran 729 cases to get its 100, and the warning names the line that threw the rest away. A generator that builds long strings, <code>StringN(8, 40)</code>, removes the waste. The warning names the busiest sources: the description of a <code>Filter</code>, or the line of an <code>Assume</code> or a <code>Skip</code>. <code>HealthLarge</code> names the draws that consumed the most choices.</p>
+<p>Health checks warn by default, the way <code>Cover</code> does, and the run passes. <code>CheckHealth()</code> makes <code>HealthFilter</code> and <code>HealthLarge</code> fail a passing run. <code>CheckHealth(HealthSlow)</code> adds the timing check, which is left out by default because a loaded CI machine can trip it. <code>IgnoreHealth(checks...)</code> hides a check and wins over <code>CheckHealth</code>. The flags <code>-pbt.checkhealth</code> and <code>-pbt.ignorehealth</code> take the same names for every <code>Check</code> of a <code>go test</code> run, for example <code>-pbt.checkhealth=default,slow</code>. Two more checks, <code>HealthFlaky</code> and <code>HealthShrink</code>, apply to failing runs; chapter 3 describes them.</p>
 
 <div class="pager">
 <span>← <a href="01-generators">Generators</a></span>
 <span><a href="03-shrinking">Shrinking</a> →</span>
 </div>
-<footer>pbt user guide for pbt v0.3.3 · <a href="https://github.com/ymotongpoo/pbt/tree/main/docs/guide">source</a> · Apache License 2.0</footer>
+<footer>pbt user guide for pbt v0.4.0 · <a href="https://github.com/ymotongpoo/pbt/tree/main/docs/guide">source</a> · Apache License 2.0</footer>
 </main>
 </div>
 </body>

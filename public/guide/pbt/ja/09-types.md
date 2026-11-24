@@ -8,24 +8,22 @@ pbtは2つの方法で型から生成器を導きます。
 
 ```go
 type Order struct {
-	ID       int      `pbt:"min=1"`
-	Items    []string `pbt:"min=1,max=5"`
-	Note     string   `pbt:"-"` // stays zero
-	Placed   time.Time
-	internal int // unexported fields stay zero
+	ID       int        `pbt:"min=1"`
+	Items    []string   `pbt:"min=1,max=5"`
+	Note     string     `pbt:"-"` // stays zero
+	Placed   time.Time  `pbt:"min=2026-01-01T00:00:00Z,max=2026-12-31T23:59:59Z"`
+	Client   netip.Addr // generated with pbt.Addr
+	internal int        // unexported fields stay zero
 }
 
 var orderGen = pbt.Make[Order](
-	pbt.WithType(pbt.Map(pbt.IntRange(0, 364), func(d int) time.Time {
-		return time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC).AddDate(0, 0, d)
-	})),
 	pbt.WithField[Order]("Items", pbt.SliceOfN(pbt.StringN(1, 8), 1, 5)),
 )
 
 func TestOrders(t *testing.T) {
 	pbt.Check(t, func(t *pbt.T) {
 		o := orderGen.Draw(t, "order")
-		if o.ID < 1 || len(o.Items) == 0 || o.Note != "" || o.Placed.Year() != 2026 {
+		if o.ID < 1 || len(o.Items) == 0 || o.Note != "" || o.Placed.Year() != 2026 || !o.Client.IsValid() {
 			t.Fatalf("unexpected order %+v", o)
 		}
 	})
@@ -36,10 +34,23 @@ func TestOrders(t *testing.T) {
 `pbt` 構造体タグでフィールドを調整できます。
 `min` と `max` は数値か、文字列、スライス、マップの長さを制限し、`-` はフィールドをゼロ値のままにします。
 生成器を差し替えるオプションが2つあります。
-`WithType(g)` はある型のすべての値に効き、上の例で `time.Time` に生成器を与えているのがこれです。
-`WithField[S](name, g)` は構造体の1つのフィールドに効きます。
+`WithType(g)` はある型のすべての値に効き、`WithField[S](name, g)` は構造体の1つのフィールドに効きます。
+上の例では、`Items` の空でない文字列を `WithField` で与えています。
 
-助けが要る型もあります。
+`Make` は、状態が非公開になっている標準ライブラリの型を知っていて、それらには1章の生成器を使います。
+
+| 型 | 生成器 |
+| --- | --- |
+| `time.Time` | `Time`。`min` と `max` があれば `TimeRange` |
+| `*time.Location` | `FixedZone` |
+| `netip.Addr`、`netip.Prefix`、`netip.AddrPort` | `Addr`、`Prefix`、`AddrPort` |
+| `net.IP` | `Addr` のアドレス。4バイトと16バイトの両方の形 |
+| `net.HardwareAddr` | `HardwareAddr` |
+
+`time.Time` のフィールドは、上の `Placed` のように、`min` と `max` をRFC 3339のタイムスタンプで受け取ります。
+`time.Duration` は整数型のままで、ほかの `int64` と同じように生成されます。
+
+これら以外にも、助けが要る型があります。
 リフレクションは非公開フィールドに値を設定できないので、非公開フィールドはゼロ値のままです。
 状態がすべて非公開の型には `WithType` が要ります。
 インターフェース、チャネル、関数には導出できる生成器がないので、同じく `WithType` か `WithField` が要ります。
@@ -92,7 +103,51 @@ func TestExprSize(t *testing.T) {
 `Bounded(leaf, node)` は下位の形です。
 値1つにつき1つの再帰予算を持ち、その値を組み上げる間に取り出すすべての制限付き生成器がその予算を共有します。
 相互に再帰する2つの型に必要な仕組みです。
-`Make` は再帰的な構造体に同じ予算を適用するので、自己参照する構造体が際限なく育つことはありません。
+
+`Make` は、かわりに値全体の大きさを制限します。
+1つの値には、`8*max(size, 1)` 単位の成長の割り当てがあります。
+コレクションの要素、文字列のルーン、`Make` が試みるマップのエントリ、nilでないポインタは、どれだけ深い位置にあっても1つにつき1単位を消費します。
+割り当てを使い切ると、コレクションはそれ以上伸びず、再帰的な参照はnilか空のままになります。
+そのため、1つの値を作る仕事量はサイズに対して線形に増えます。
+固定のフィールド、配列、タグの最小長は、割り当てを使い切った後も満たします。
+ただし、最小長を満たそうとすると際限なく再帰する場合は除きます。
+
+```go
+// A directory holds files and directories. Make shares one allowance of
+// growth across the whole value, so a tree stays proportional to the size
+// parameter however the fields nest.
+type Dir struct {
+	Name  string
+	Files []string
+	Dirs  []Dir
+}
+
+func countNodes(d Dir) int {
+	n := 1 + len(d.Files) + len([]rune(d.Name))
+	for _, s := range d.Files {
+		n += len([]rune(s))
+	}
+	for _, c := range d.Dirs {
+		n += countNodes(c)
+	}
+	return n
+}
+
+func TestDirectoryTrees(t *testing.T) {
+	pbt.Check(t, func(t *pbt.T) {
+		d := pbt.Make[Dir]().Draw(t, "dir")
+		if n := countNodes(d); n > 8*max(t.Size(), 1)+1 {
+			t.Fatalf("%d elements at size %d", n, t.Size())
+		}
+	})
+}
+```
+
+`BoundedGrowth(g)` は、手書きの生成器に同じ割り当てを与えます。
+`g` の中で取り出すコレクションとポインタが、その割り当てを共有します。
+`UnboundedGrowth(g)` は、一部を外側の割り当てから外します。
+明示的に差し替えた生成器が、自分の長さの規則を優先させるときに必要な仕組みです。
+`Make` は `WithType` と `WithField` にこれを使います。
 
 ## pbtgen
 
@@ -107,7 +162,9 @@ func TestExprSize(t *testing.T) {
 `Make` の構造体タグはそのまま効きます。
 `gen=EXPR` タグは、フィールドの生成器として使うGoの式を指定します。
 同じパッケージにある `pbt.Gen[string]` 型の変数などです。
-再帰的な型は、相互再帰を含めて `Bounded` を通して生成されます。
+生成されるコードは、標準ライブラリの型に `Make` と同じ生成器を使い、`BoundedGrowth` を通して `Make` と同じ割り当てを使います。
+そのため、非公開フィールドを持たない型は、相互に再帰する型も含めて、同じシードから `Make` とpbtgenで同じ値を得ます。
+非公開フィールドを持つ型では、pbtgenがそのフィールドにも値を設定する分、`Make` より多くを生成します。
 
 出力を調整するフラグが3つあります。
 `-output` はファイル名を指定します。

@@ -138,7 +138,7 @@ func (q *leakyQueue) Close(id int) error {
 The report shows the program, the history of the run and the model state before the step that failed.
 
 ```text
-[pbt] property failed after 5 passed checks and 65 shrink steps (size 6)
+[pbt] property failed after 5 passed checks and 81 shrink steps (size 6)
 [pbt] cmds (Commands) = Program{
 [pbt]     var1 = issue()
 [pbt]     var2 = close(var1)

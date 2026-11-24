@@ -52,7 +52,7 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 <div class="layout">
 <nav class="side">
 <h1><a href="./">pbt 利用ガイド</a></h1>
-<div class="version">pbt v0.3.3</div>
+<div class="version">pbt v0.4.0</div>
 <ol>
 <li><a href="./">はじめに</a></li>
 <li><a href="01-generators">生成器</a></li>
@@ -64,7 +64,8 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 <li><a href="07-fsm">状態機械</a></li>
 <li><a href="08-targeted">標的型探索と存在性</a></li>
 <li><a href="09-types">型から導く生成器</a></li>
-<li><a href="10-reference">次に読むもの</a></li>
+<li><a href="10-formats">規格が定める形式</a></li>
+<li><a href="11-reference">次に読むもの</a></li>
 </ol>
 <div class="lang"><a href="../04-properties">English</a></div>
 <div class="lang"><a href="https://pkg.go.dev/go.ymotongpoo.com/pbt">pkg.go.dev</a> · <a href="https://github.com/ymotongpoo/pbt">GitHub</a></div>
@@ -74,7 +75,7 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 <h1 id="heading">プロパティと実行</h1>
 <p>実行の形を決める要素を扱います。ケースの数、サイズ、破棄したケースの扱い、ケースの前後に動くもの、プロパティの組み合わせ、失敗の再現です。</p>
 <h2 id="heading-1">オプションとフラグ</h2>
-<p>すべての設定に、<code>go test</code> の実行全体に有効なフラグと、1回の <code>Check</code> に有効なオプションがあります。オプションがフラグより優先されます。</p>
+<p>ほとんどの設定に、<code>go test</code> の実行全体に有効なフラグと、1回の <code>Check</code> に有効なオプションがあります。オプションがフラグより優先されます。ただしヘルスチェックは例外で、フラグとオプションの指定が足し合わされます。</p>
 <table>
 <thead>
 <tr>
@@ -108,6 +109,12 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 <td><code>ShrinkTime(d)</code></td>
 <td>30s</td>
 <td>失敗1件の縮小に使う時間</td>
+</tr>
+<tr>
+<td><code>-pbt.failures</code></td>
+<td><code>MaxFailures(n)</code></td>
+<td>1</td>
+<td>集めて縮小し報告する、種類の異なる失敗の数</td>
 </tr>
 <tr>
 <td><code>-pbt.searchsteps</code></td>
@@ -156,6 +163,18 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 <td><code>CheckCoverage()</code></td>
 <td>false</td>
 <td>不足か未決の <code>Cover</code> 要求で失敗</td>
+</tr>
+<tr>
+<td><code>-pbt.checkhealth</code></td>
+<td><code>CheckHealth(checks...)</code></td>
+<td>なし</td>
+<td>通過した実行を失敗にするヘルスチェック（2章）</td>
+</tr>
+<tr>
+<td><code>-pbt.ignorehealth</code></td>
+<td><code>IgnoreHealth(checks...)</code></td>
+<td>なし</td>
+<td>隠すヘルスチェック</td>
 </tr>
 <tr>
 <td></td>
@@ -295,15 +314,36 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 </span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#6639ba">Check</span><span style="color:#1f2328">(</span><span style="color:#1f2328">t</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#6639ba">NoPanic</span><span style="color:#1f2328">(</span><span style="color:#1f2328">strings</span><span style="color:#1f2328">.</span><span style="color:#1f2328">Repeat</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#6639ba">WithType</span><span style="color:#1f2328">(</span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#6639ba">IntRange</span><span style="color:#1f2328">(</span><span style="color:#0550ae">0</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#0550ae">3</span><span style="color:#1f2328">))))</span><span style="color:#fff">
 </span></span></span><span style="display:flex;"><span><span style="color:#1f2328">}</span><span style="color:#fff">
 </span></span></span></code></pre><p><code>Recover</code> は関数を実行し、パニックの値か <code>nil</code> を返すので、不正な入力でパニックすることをプロパティで主張できます。<code>NoPanic</code> は関数を受け取り、その引数を <code>Make</code> で生成します。<code>Make</code> は9章で説明します。<code>WithType</code> と <code>WithField</code> のオプションで引数を絞れます。</p>
+<h2 id="1">1回の実行での複数の失敗</h2>
+<p>実行は通常、最初の失敗で止まり、それを縮小して報告します。そのため、バグが2つある関数では、バグが1つずつしか見えません。1つ目を直して再び実行して、ようやく2つ目に出会います。<code>MaxFailures(n)</code> か <code>-pbt.failures=n</code> を指定すると、失敗の後も実行を続けます。仕方の異なる失敗を最大 <code>n</code> 件集め、それぞれを縮小し、保存し、報告します。</p>
+<pre style="background-color:#f7f7f7;-webkit-text-size-adjust:none;"><code><span style="display:flex;"><span><span style="color:#cf222e">var</span><span style="color:#fff"> </span><span style="color:#1f2328">portProperty</span><span style="color:#fff"> </span><span style="color:#1f2328">=</span><span style="color:#fff"> </span><span style="color:#cf222e">func</span><span style="color:#1f2328">(</span><span style="color:#1f2328">t</span><span style="color:#fff"> </span><span style="color:#0550ae">*</span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#1f2328">T</span><span style="color:#1f2328">)</span><span style="color:#fff"> </span><span style="color:#1f2328">{</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#1f2328">s</span><span style="color:#fff"> </span><span style="color:#0550ae">:=</span><span style="color:#fff"> </span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#6639ba">StringOf</span><span style="color:#1f2328">(</span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#6639ba">SampledFrom</span><span style="color:#1f2328">([]</span><span style="color:#6639ba">rune</span><span style="color:#1f2328">(</span><span style="color:#0a3069">&#34;0123456789&#34;</span><span style="color:#1f2328">))).</span><span style="color:#6639ba">Draw</span><span style="color:#1f2328">(</span><span style="color:#1f2328">t</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#0a3069">&#34;s&#34;</span><span style="color:#1f2328">)</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#1f2328">n</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#1f2328">ok</span><span style="color:#fff"> </span><span style="color:#0550ae">:=</span><span style="color:#fff"> </span><span style="color:#6639ba">parsePort</span><span style="color:#1f2328">(</span><span style="color:#1f2328">s</span><span style="color:#1f2328">)</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#cf222e">if</span><span style="color:#fff"> </span><span style="color:#1f2328">ok</span><span style="color:#fff"> </span><span style="color:#0550ae">&amp;&amp;</span><span style="color:#fff"> </span><span style="color:#1f2328">!</span><span style="color:#6639ba">validPort</span><span style="color:#1f2328">(</span><span style="color:#1f2328">s</span><span style="color:#1f2328">)</span><span style="color:#fff"> </span><span style="color:#1f2328">{</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">		</span><span style="color:#1f2328">t</span><span style="color:#1f2328">.</span><span style="color:#6639ba">Fatalf</span><span style="color:#1f2328">(</span><span style="color:#0a3069">&#34;parsePort(%q) accepted %d&#34;</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#1f2328">s</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#1f2328">n</span><span style="color:#1f2328">)</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#1f2328">}</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#cf222e">if</span><span style="color:#fff"> </span><span style="color:#1f2328">!</span><span style="color:#1f2328">ok</span><span style="color:#fff"> </span><span style="color:#0550ae">&amp;&amp;</span><span style="color:#fff"> </span><span style="color:#6639ba">validPort</span><span style="color:#1f2328">(</span><span style="color:#1f2328">s</span><span style="color:#1f2328">)</span><span style="color:#fff"> </span><span style="color:#1f2328">{</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">		</span><span style="color:#1f2328">t</span><span style="color:#1f2328">.</span><span style="color:#6639ba">Fatalf</span><span style="color:#1f2328">(</span><span style="color:#0a3069">&#34;parsePort(%q) rejected a valid port&#34;</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#1f2328">s</span><span style="color:#1f2328">)</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#1f2328">}</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#1f2328">}</span><span style="color:#fff">
+</span></span></span></code></pre><pre style="background-color:#f7f7f7;-webkit-text-size-adjust:none;"><code><span style="display:flex;"><span>[pbt] failure 1 of 2: property failed after 6 passed checks and 9 shrink steps (size 4)
+</span></span><span style="display:flex;"><span>[pbt] s (StringOf(SampledFrom(10 values))) = &#34;0&#34;
+</span></span><span style="display:flex;"><span>[pbt] error: parsePort(&#34;0&#34;) accepted 0
+</span></span><span style="display:flex;"><span>[pbt] reproduce: go test -run &#39;TestPort&#39; -pbt.seed=0x1 -pbt.failures=2
+</span></span><span style="display:flex;"><span>[pbt] failure 2 of 2: property failed after 6 passed checks and 90 shrink steps (size 8)
+</span></span><span style="display:flex;"><span>[pbt] s (StringOf(SampledFrom(10 values))) = &#34;7000&#34;
+</span></span><span style="display:flex;"><span>[pbt] error: parsePort(&#34;7000&#34;) rejected a valid port
+</span></span><span style="display:flex;"><span>[pbt] reproduce: go test -run &#39;TestPort&#39; -pbt.seed=0x1 -pbt.failures=2
+</span></span></code></pre><p>失敗した行が違うか、パニックの型か発生位置が違うとき、2つの失敗は異なるものとみなされます。この区別は、3章で縮小を1つのバグにとどめていたものと同じです。縮小器が途中で新しい仕方の失敗に出会えば、それも <code>n</code> 件のうちの1件になります。どの失敗にも、<code>ShrinkTime</code> の時間がそれぞれ丸ごと割り当てられます。2つ目の最小値7000は局所的な最小です。本当の境界は6554ですが、そこへ至るには後ろの桁をより大きな数字にする必要があり、縮小器はそれを試しません。保存した失敗はまとめて再実行され、保存済みのケースが再実行で失敗したときは、それ以上の失敗を探しません。<code>CheckExists</code> はこのオプションを無視します。</p>
 <h2 id="heading-7">シード、保存したケース、再実行</h2>
-<p>すべての報告は、実行のシードを含む <code>reproduce:</code> の行で終わります。そのシードを <code>-pbt.seed</code> に渡すと、プロパティのコードとpbtのバージョンが同じであれば、失敗したケースを含む同じケースの列が繰り返されます。pbtを更新すると、同じシードから生成されるケースが変わることがあります。v0.3.2では整数生成の修正により一部のシードで生成結果が変わりますが、既存の保存済み選択列は従来どおり再生されます。</p>
+<p>すべての報告は、実行のシードを含む <code>reproduce:</code> の行で終わります。そのシードを <code>-pbt.seed</code> に渡すと、プロパティのコードとpbtのバージョンが同じであれば、失敗したケースを含む同じケースの列が繰り返されます。pbtを更新すると、同じシードから生成されるケースが変わることがあります。v0.3.2では整数生成の修正により、一部のシードで生成結果が変わります。v0.4.0では、一部の再帰的な型について <code>Make</code> が生成する値が変わり、縮小器が別の、より小さなケースに到達することがあります。保存済みのケースは、その選択の列を、インストールされているバージョンの生成器に通して再生します。pbtを更新した後は、再帰的な型に <code>Make</code> を使うプロパティの保存済みケースが、別の値を作ることがあります。</p>
 <p>失敗したケースは <code>testdata/pbt/&lt;テスト名&gt;/&lt;ハッシュ&gt;</code> にもテキストファイルとして保存されます。サイズ、コメントとして取り出した値、そして選択の列が入っています。同じテストの以後の <code>Check</code> は、新しいケースを生成する前に保存済みのケースを再実行し、まだ失敗するなら失敗にします。回帰ケースがコードとともにバージョン管理に入るわけです。ケースを捨てるにはファイルを削除します。この挙動を調整するオプションが3つあります。<code>NoSave</code> は実行に書き込みをさせません。<code>NoReplay</code> は保存済みケースを飛ばします。<code>ReplayFile</code> またはフラグ <code>-pbt.replay=FILE</code> は、どのテストでも保存済みファイルを1つ再実行します。あるテストのケースを別のテストに渡すときや、CIのログにある失敗を手元で再現するときに使います。</p>
 
 <div class="pager">
 <span>← <a href="03-shrinking">縮小</a></span>
 <span><a href="05-stateful">ステートフルテスト</a> →</span>
 </div>
-<footer>pbt 利用ガイド for pbt v0.3.3 · <a href="https://github.com/ymotongpoo/pbt/tree/main/docs/guide">source</a> · Apache License 2.0</footer>
+<footer>pbt 利用ガイド for pbt v0.4.0 · <a href="https://github.com/ymotongpoo/pbt/tree/main/docs/guide">source</a> · Apache License 2.0</footer>
 </main>
 </div>
 </body>

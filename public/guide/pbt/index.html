@@ -52,7 +52,7 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 <div class="layout">
 <nav class="side">
 <h1><a href="./">pbt user guide</a></h1>
-<div class="version">pbt v0.3.3</div>
+<div class="version">pbt v0.4.0</div>
 <ol>
 <li class="current"><a href="./">Getting started</a></li>
 <li><a href="01-generators">Generators</a></li>
@@ -64,7 +64,8 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 <li><a href="07-fsm">State machines</a></li>
 <li><a href="08-targeted">Targeted search and existence</a></li>
 <li><a href="09-types">Generators from types</a></li>
-<li><a href="10-reference">Where to go next</a></li>
+<li><a href="10-formats">Standard formats</a></li>
+<li><a href="11-reference">Where to go next</a></li>
 </ol>
 <div class="lang"><a href="ja/">日本語</a></div>
 <div class="lang"><a href="https://pkg.go.dev/go.ymotongpoo.com/pbt">pkg.go.dev</a> · <a href="https://github.com/ymotongpoo/pbt">GitHub</a></div>
@@ -125,7 +126,7 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 </span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#1f2328">}</span><span style="color:#fff">
 </span></span></span><span style="display:flex;"><span><span style="color:#1f2328">}</span><span style="color:#fff">
 </span></span></span></code></pre><p>A run of <code>pbt.Check(t, biggestProperty)</code> fails with this report.</p>
-<pre style="background-color:#f7f7f7;-webkit-text-size-adjust:none;"><code><span style="display:flex;"><span>[pbt] property failed after 12 passed checks and 16 shrink steps (size 13)
+<pre style="background-color:#f7f7f7;-webkit-text-size-adjust:none;"><code><span style="display:flex;"><span>[pbt] property failed after 12 passed checks and 20 shrink steps (size 13)
 </span></span><span style="display:flex;"><span>[pbt] xs (SliceOfN(Int(), 1, -1)) = []int{-1}
 </span></span><span style="display:flex;"><span>[pbt] error: biggest([-1]) = 0, want -1
 </span></span><span style="display:flex;"><span>[pbt] saved to testdata/pbt/TestBiggest/5a0c…; go test replays it until the file is deleted
@@ -139,13 +140,13 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 <li>The last line is the command that reproduces the run, seed included.</li>
 </ul>
 <h2 id="what-the-rest-of-the-guide-covers">What the rest of the guide covers</h2>
-<p>The chapters build on each other. Chapters 1 to 4 cover generators, the size and distribution of the data, shrinking, and the options of a run. Chapters 5 to 7 cover stateful testing against a model, parallel execution and state machines. Chapter 8 covers targeted search and existential properties, chapter 9 the generators derived from types, and chapter 10 points to the examples, the migration guide for rapid users and the reference material.</p>
+<p>The chapters build on each other. Chapters 1 to 4 cover generators, the size and distribution of the data, shrinking, and the options of a run. Chapters 5 to 7 cover stateful testing against a model, parallel execution and state machines. Chapter 8 covers targeted search and existential properties, and chapter 9 the generators derived from types. Chapter 10 covers the strings in the formats that standards define. Chapter 11 points to the examples, the migration guide for rapid users and the reference material.</p>
 
 <div class="pager">
 <span></span>
 <span><a href="01-generators">Generators</a> →</span>
 </div>
-<footer>pbt user guide for pbt v0.3.3 · <a href="https://github.com/ymotongpoo/pbt/tree/main/docs/guide">source</a> · Apache License 2.0</footer>
+<footer>pbt user guide for pbt v0.4.0 · <a href="https://github.com/ymotongpoo/pbt/tree/main/docs/guide">source</a> · Apache License 2.0</footer>
 </main>
 </div>
 </body>

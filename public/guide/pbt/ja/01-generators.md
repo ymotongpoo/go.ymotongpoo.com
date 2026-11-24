@@ -11,7 +11,9 @@ pbtが現在のケースについて記録している選択から `V` を作る
 | --- | --- |
 | 整数 | `Int`、`IntRange`、`IntMin`、`IntMax`、`IntRangeToward`。`Int32`、`Int64`、`Uint`、`Uint32`、`Uint64`、`Byte` とそれぞれの `Range` 版。任意の整数型には `Integer[I]` と `IntegerRange[I]` |
 | 浮動小数点数 | 有限の値には `Float64`、`Float64Range`、`Float32`、`Float32Range`。`AnyFloat64` はNaNと無限大を加える |
-| 文字と文字列 | `Bool`、`Rune`、`String`、`StringN`、`StringOf`、`StringOfN`、`Bytes`、`BytesN` |
+| 文字と文字列 | `Bool`、`Rune`、`RuneIn`、`String`、`StringN`、`StringOf`、`StringOfN`、`StringMatching`、`Bytes`、`BytesN` |
+| 時刻 | `Time`、`TimeRange`、`Duration`、`DurationRange`、`FixedZone`、`Zone` |
+| ネットワーク | `net/netip` の型を返す `IPv4`、`IPv6`、`Addr`、`AddrIn`、`Prefix`、`AddrPort` と、`HardwareAddr` |
 | コレクション | `SliceOf`、`SliceOfN`、`SliceOfDistinct`、`SliceOfNDistinct`、`MapOf`、`MapOfN`、`Permutation` |
 | 選択 | `Just`、`SampledFrom`、`OneOf`、`Frequency`、`Ptr` |
 | 関数 | `Func`、`Func2`。コールバックを受け取るコードのプロパティ向けに、純粋な関数を生成する |
@@ -20,6 +22,93 @@ pbtが現在のケースについて記録している選択から `V` を作る
 整数は、バグが潜みやすい範囲の境界と小さな値に寄ります。
 文字列とコレクションの長さは、ケースのサイズパラメーターに従います。
 最大長の `-1` は上限なしを意味します。
+RFC 3339のタイムスタンプ、メールアドレス、URIなど、規格が定める形式の文字列は、パッケージ `go.ymotongpoo.com/pbt/format` が生成します。
+このパッケージは10章で説明します。
+
+## 時刻とアドレス
+
+時刻とアドレスの生成器も整数と同じ方針で、コードが誤動作しやすい値に寄ります。
+`Time` は、`time.Time` のゼロ値から9999年の終わりまでの時刻を生成します。
+そのうち半分近くは暦の境目へ移します。
+境目とは、日、月、年の最初または最後のナノ秒、2月29日、範囲の端です。
+保存されたタイムスタンプの多くはマイクロ秒、ミリ秒、秒の単位までしか持たないので、一部のケースでは秒未満の端数をそれらの単位に丸めます。
+1か月後の日付を求める計算は、こうした値で誤動作する典型例です。
+
+```go
+var billingProperty = func(t *pbt.T) {
+	start := pbt.Time().Draw(t, "")
+	next := nextBillingDate(start)
+	if want := (start.Month() % 12) + 1; next.Month() != want {
+		t.Fatalf("next billing date %s is not in %s", next.Format(time.DateOnly), want)
+	}
+}
+```
+
+```text
+[pbt] property failed after 39 passed checks and 13 shrink steps (size 40)
+[pbt] start (Time()) = time.Date(1970, time.January, 31, 23, 59, 59, 999999999, time.UTC)
+[pbt] error: next billing date 1970-03-03 is not in February
+[pbt] reproduce: go test -run 'TestBilling' -pbt.seed=0x1
+```
+
+`AddDate` は1月31日の1か月後を正規化して3月3日にします。
+実行は月の最後のナノ秒を見つけました。
+縮小器はそれを、`Time` の縮小先であるUnixエポックの月、1970年1月へ移しました。
+`TimeRange(lo, hi)` は、範囲内の値を `lo` のロケーションで生成します。
+夏時間のあるロケーションでは、オフセットが切り替わる時刻の近くにも値を寄せます。
+切り替わりの瞬間、その1ナノ秒前、前後の30分です。
+`Zone` はIANAのタイムゾーンを読み込み、デフォルトでは規則の変わったゾーンの一覧から選びます。
+`FixedZone` は固定のオフセットを生成します。
+
+アドレスの生成器は `net/netip` の型を返します。
+`IPv4` と `IPv6` は、アドレスの一部をRFC 6890の特殊用途ブロックから生成します。
+ループバック、プライベートネットワーク、リンクローカル、ドキュメント用、マルチキャスト、IPv6ではさらにIPv4射影アドレスがこれに含まれます。
+`AddrIn` は、渡したプレフィックスの中のアドレスだけを生成します。
+
+```go
+// The client of a request is an address inside the private networks of
+// RFC 1918, and the rate limiter keys clients by their /24.
+func TestClientKey(t *testing.T) {
+	private := pbt.AddrIn(
+		netip.MustParsePrefix("10.0.0.0/8"),
+		netip.MustParsePrefix("172.16.0.0/12"),
+		netip.MustParsePrefix("192.168.0.0/16"),
+	)
+	pbt.Check(t, func(t *pbt.T) {
+		client := private.Draw(t, "client")
+		key := netip.PrefixFrom(client, 24).Masked()
+		if !key.Contains(client) || !key.Addr().IsPrivate() {
+			t.Fatalf("key %s does not cover %s", key, client)
+		}
+	})
+}
+```
+
+## パターンに一致する文字列
+
+`StringMatching` は、パッケージ `regexp` の構文で書いた正規表現から文字列を組みます。
+どの値もパターン全体に一致し、縮小しても一致したままです。
+`|` で並べた分岐は前の分岐へ、繰り返しは最小の回数へ、文字クラスはその中で最初の印字可能なASCII文字へ縮みます。
+`RuneIn` は、スクリプトやカテゴリなど、パッケージ `unicode` の範囲表からルーンを生成します。
+表の各範囲が同じ確率で選ばれるので、小さなスクリプトがCJK統合漢字に埋もれることはありません。
+
+```go
+// An order number has two capital letters, a dash and four digits.
+var orderID = regexp.MustCompile(`^[A-Z]{2}-\d{4}$`)
+
+func TestOrderIDs(t *testing.T) {
+	pbt.Check(t, func(t *pbt.T) {
+		id := pbt.StringMatching(`[A-Z]{2}-\d{4}`).Draw(t, "id")
+		if !orderID.MatchString(id) {
+			t.Fatalf("%q is not an order number", id)
+		}
+		name := pbt.StringOfN(pbt.RuneIn(unicode.Hiragana, unicode.Katakana, unicode.Han), 1, 8).Draw(t, "name")
+		if label := fmt.Sprintf("%s %s", id, name); len([]rune(label)) > 16 {
+			t.Fatalf("label %q is too long", label)
+		}
+	})
+}
+```
 
 ## 自分の生成器を作る
 
@@ -95,7 +184,7 @@ var displayNameProperty = func(t *pbt.T) {
 ```
 
 ```text
-[pbt] property failed after 3 passed checks and 145 shrink steps (size 4)
+[pbt] property failed after 3 passed checks and 189 shrink steps (size 4)
 [pbt] user (user) = snippets.User{Name:"aaaaaaaaa", Age:0, Email:"aaaaaaaaa@example.com"}
 [pbt]   name (StringOfN(SampledFrom(26 values), 1, 12)) = "aaaaaaaaa"
 [pbt]   age (IntRange(0, 120)) = 0
@@ -107,6 +196,13 @@ var displayNameProperty = func(t *pbt.T) {
 年齢は失敗に関係しないので0まで縮んでいます。
 報告はラベル付きの値を3段の深さまで載せ、1つの値を2000文字で切ります。
 `ReportDepth` と `ReportLimit` のオプションで両方を変えられます。
+
+プロパティの最上位で取り出した値は、ラベルがなくても報告に載ります。
+上の `start := pbt.Time().Draw(t, "")` のように取り出した値を1つの変数に代入していれば、報告はその変数の名前で値を示します。
+そうでなければ、`Int() at prop_test.go:12 = 5` のように、取り出したファイルと行を示します。
+報告を作るとき、pbtはソースファイルを読んで変数の名前を探します。
+`-trimpath` を付けてビルドしたバイナリのようにファイルを読めないときは、行を示します。
+`Verbose()` か `-pbt.v` を付けると、すべての取り出しに行が付きます。
 
 ## プロパティの外で値を見る
 

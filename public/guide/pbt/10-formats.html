@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Standard formats · pbt user guide</title>
+<link rel="canonical" href="https://go.ymotongpoo.com/pbt/guide/10-formats">
+<link rel="alternate" type="text/markdown" href="10-formats.md">
+<link rel="describedby" type="text/markdown" href="/pbt/llms.txt">
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-EC4QPYV95Y"></script>
+<script>
+window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'G-EC4QPYV95Y');
+</script>
+<style>
+:root { --fg: #1f2328; --muted: #59636e; --line: #d1d9e0; --accent: #0969da; --bg: #fff; --code: #f6f8fa; }
+* { box-sizing: border-box; }
+body { margin: 0; color: var(--fg); background: var(--bg); font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, "Hiragino Sans", "Noto Sans JP", sans-serif; }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+.layout { display: grid; grid-template-columns: 16rem minmax(0, 1fr); min-height: 100vh; }
+nav.side { border-right: 1px solid var(--line); padding: 1.5rem 1rem; font-size: 0.92rem; }
+nav.side h1 { font-size: 1rem; margin: 0 0 0.25rem; }
+nav.side .version { color: var(--muted); font-size: 0.8rem; margin-bottom: 1rem; }
+nav.side ol { list-style: none; padding: 0; margin: 0; }
+nav.side li { margin: 0.2rem 0; }
+nav.side li.current a { font-weight: 600; color: var(--fg); }
+nav.side .lang { margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--line); }
+main { padding: 2rem 3rem 4rem; max-width: 52rem; }
+main h1 { font-size: 1.9rem; line-height: 1.25; margin-top: 0; }
+main h2 { font-size: 1.35rem; margin-top: 2.2rem; border-bottom: 1px solid var(--line); padding-bottom: 0.2rem; }
+main h3 { font-size: 1.1rem; margin-top: 1.6rem; }
+code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.88em; }
+p code, li code, td code { background: var(--code); padding: 0.1em 0.3em; border-radius: 4px; }
+pre { background: var(--code) !important; padding: 0.9rem 1rem; border-radius: 6px; overflow-x: auto; line-height: 1.5; }
+table { border-collapse: collapse; margin: 1rem 0; font-size: 0.92rem; }
+th, td { border: 1px solid var(--line); padding: 0.35rem 0.6rem; text-align: left; vertical-align: top; }
+th { background: var(--code); }
+blockquote { margin: 1rem 0; padding: 0.2rem 1rem; border-left: 4px solid var(--line); color: var(--muted); }
+.pager { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--line); gap: 1rem; }
+footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
+@media (max-width: 760px) {
+  .layout { grid-template-columns: 1fr; }
+  nav.side { border-right: 0; border-bottom: 1px solid var(--line); }
+  main { padding: 1.5rem 1.2rem 3rem; }
+}
+</style>
+</head>
+<body>
+<div class="layout">
+<nav class="side">
+<h1><a href="./">pbt user guide</a></h1>
+<div class="version">pbt v0.4.0</div>
+<ol>
+<li><a href="./">Getting started</a></li>
+<li><a href="01-generators">Generators</a></li>
+<li><a href="02-distribution">Size, distribution and statistics</a></li>
+<li><a href="03-shrinking">Shrinking</a></li>
+<li><a href="04-properties">Properties and runs</a></li>
+<li><a href="05-stateful">Stateful testing</a></li>
+<li><a href="06-parallel">Parallel testing</a></li>
+<li><a href="07-fsm">State machines</a></li>
+<li><a href="08-targeted">Targeted search and existence</a></li>
+<li><a href="09-types">Generators from types</a></li>
+<li class="current"><a href="10-formats">Standard formats</a></li>
+<li><a href="11-reference">Where to go next</a></li>
+</ol>
+<div class="lang"><a href="ja/10-formats">日本語</a></div>
+<div class="lang"><a href="https://pkg.go.dev/go.ymotongpoo.com/pbt">pkg.go.dev</a> · <a href="https://github.com/ymotongpoo/pbt">GitHub</a></div>
+<div class="lang"><a href="10-formats.md">Markdown</a> · <a href="/pbt/llms.txt">llms.txt</a></div>
+</nav>
+<main>
+<h1 id="standard-formats">Standard formats</h1>
+<p>Many inputs of a program are strings in a format that a standard defines: timestamps, e-mail addresses, URIs, JSON, UUIDs, language tags. The package <code>go.ymotongpoo.com/pbt/format</code> generates them. Every generator returns a <code>pbt.Gen[string]</code> and builds its values from the grammar of the standard. Every value is valid, including the values the shrinker tries.</p>
+<pre style="background-color:#f7f7f7;-webkit-text-size-adjust:none;"><code><span style="display:flex;"><span><span style="color:#cf222e">import</span><span style="color:#fff"> </span><span style="color:#0a3069">&#34;go.ymotongpoo.com/pbt/format&#34;</span><span style="color:#fff">
+</span></span></span></code></pre><p>The generators of chapter 1 return Go types, such as a <code>time.Time</code> or a <code>netip.Addr</code>. The generators of this package return text. <code>pbt.IPv6()</code> gives an address; <code>format.RFC4291IPv6()</code> gives the ways to write one.</p>
+<h2 id="two-names-for-two-questions">Two names for two questions</h2>
+<p>A format raises two questions. What should a program write? What must a parser accept? The answers differ, and the package gives each one its own name.</p>
+<ul>
+<li>A function with a plain name, such as <code>Email</code>, <code>URL</code> or <code>HTTPDate</code>, generates the common or canonical form. Use it for the input of code that produces or stores the format, and for values that should pass every validator.</li>
+<li>A function named after a standard, such as <code>RFC5321Mailbox</code>, <code>RFC3986URI</code> or <code>RFC9110HTTPDate</code>, generates the alternatives of the standard's production. Use it to test a parser. It leaves out only what the standard forbids generators to produce, such as the obsolete syntax of RFC 5322. Its documentation names those parts and the bounds it puts on open lengths.</li>
+</ul>
+<p><code>Time(layout)</code> takes the layout constants of package <code>time</code>, so <code>format.Time(time.RFC1123)</code> generates what <code>time.Time.Format</code> writes for that layout. It is the alias for what Go writes; <code>RFC3339</code> is the alias for what RFC 3339 allows.</p>
+<table>
+<thead>
+<tr>
+<th>Area</th>
+<th>What a program writes</th>
+<th>What a parser must accept</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Timestamps</td>
+<td><code>Time(time.RFC3339)</code>, <code>HTTPDate</code></td>
+<td><code>RFC3339</code>, <code>RFC3339FullDate</code>, <code>RFC3339FullTime</code>, <code>RFC9110HTTPDate</code>, <code>RFC5322DateTime</code></td>
+</tr>
+<tr>
+<td>Durations</td>
+<td><code>ISO8601Duration</code></td>
+<td><code>RFC3339Duration</code></td>
+</tr>
+<tr>
+<td>Addresses</td>
+<td><code>IPv4</code>, <code>RFC5952IPv6</code>, <code>CIDR</code>, <code>MAC</code></td>
+<td><code>RFC4291IPv6</code></td>
+</tr>
+<tr>
+<td>Host names</td>
+<td><code>Hostname</code>, <code>IDNAHostname</code>, <code>UnicodeHostname</code></td>
+<td><code>RFC1035Domain</code></td>
+</tr>
+<tr>
+<td>E-mail</td>
+<td><code>Email</code>, <code>HTMLEmail</code>, <code>SMTPUTF8Mailbox</code></td>
+<td><code>RFC5321Mailbox</code>, <code>RFC5322AddrSpec</code></td>
+</tr>
+<tr>
+<td>URIs</td>
+<td><code>URL</code></td>
+<td><code>RFC3986URI</code>, <code>RFC3986Reference</code></td>
+</tr>
+<tr>
+<td>HTTP</td>
+<td><code>HTTPToken</code>, <code>HTTPFieldName</code>, <code>HTTPFieldValue</code>, <code>MediaType</code></td>
+<td><code>RFC9110FieldValue</code>, <code>RFC9110MediaType</code>, <code>RFC6265Cookie</code>, <code>RFC6265SetCookie</code></td>
+</tr>
+<tr>
+<td>Data</td>
+<td><code>JSON</code>, <code>IJSON</code>, <code>JSONPointer</code>, <code>JSONPointerFragment</code>, <code>UUID</code>, <code>SemVer</code>, <code>LanguageTag</code></td>
+<td><code>RFC4180CSV</code>, <code>RFC5646LanguageTag</code></td>
+</tr>
+<tr>
+<td>Encodings</td>
+<td><code>Base64</code>, <code>Base64URL</code>, <code>Base32</code>, <code>Base32Hex</code>, <code>Base16</code>, <code>Hex</code> and the unpadded <code>Raw</code> forms</td>
+<td></td>
+</tr>
+<tr>
+<td>Numbers</td>
+<td><code>PhoneNumber</code>, <code>PaymentCard</code>, <code>ISBN13</code>, <code>ISBN10</code></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h2 id="testing-a-parser">Testing a parser</h2>
+<p>A property that feeds a parser every form of its standard finds where the parser departs from it. Every RFC 3339 timestamp should parse with the layout of the same name.</p>
+<pre style="background-color:#f7f7f7;-webkit-text-size-adjust:none;"><code><span style="display:flex;"><span><span style="color:#57606a">// Every timestamp of RFC 3339 should parse with the RFC3339 layout of</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#57606a">// package time.</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#cf222e">var</span><span style="color:#fff"> </span><span style="color:#1f2328">rfc3339Property</span><span style="color:#fff"> </span><span style="color:#1f2328">=</span><span style="color:#fff"> </span><span style="color:#cf222e">func</span><span style="color:#1f2328">(</span><span style="color:#1f2328">t</span><span style="color:#fff"> </span><span style="color:#0550ae">*</span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#1f2328">T</span><span style="color:#1f2328">)</span><span style="color:#fff"> </span><span style="color:#1f2328">{</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#1f2328">s</span><span style="color:#fff"> </span><span style="color:#0550ae">:=</span><span style="color:#fff"> </span><span style="color:#1f2328">format</span><span style="color:#1f2328">.</span><span style="color:#6639ba">RFC3339</span><span style="color:#1f2328">().</span><span style="color:#6639ba">Draw</span><span style="color:#1f2328">(</span><span style="color:#1f2328">t</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#0a3069">&#34;&#34;</span><span style="color:#1f2328">)</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#cf222e">if</span><span style="color:#fff"> </span><span style="color:#1f2328">_</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#1f2328">err</span><span style="color:#fff"> </span><span style="color:#0550ae">:=</span><span style="color:#fff"> </span><span style="color:#1f2328">time</span><span style="color:#1f2328">.</span><span style="color:#6639ba">Parse</span><span style="color:#1f2328">(</span><span style="color:#1f2328">time</span><span style="color:#1f2328">.</span><span style="color:#1f2328">RFC3339</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#1f2328">s</span><span style="color:#1f2328">);</span><span style="color:#fff"> </span><span style="color:#1f2328">err</span><span style="color:#fff"> </span><span style="color:#0550ae">!=</span><span style="color:#fff"> </span><span style="color:#cf222e">nil</span><span style="color:#fff"> </span><span style="color:#1f2328">{</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">		</span><span style="color:#1f2328">t</span><span style="color:#1f2328">.</span><span style="color:#6639ba">Fatalf</span><span style="color:#1f2328">(</span><span style="color:#0a3069">&#34;time.Parse rejects %s: %v&#34;</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#1f2328">s</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#1f2328">err</span><span style="color:#1f2328">)</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#1f2328">}</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#1f2328">}</span><span style="color:#fff">
+</span></span></span></code></pre><pre style="background-color:#f7f7f7;-webkit-text-size-adjust:none;"><code><span style="display:flex;"><span>[pbt] property failed after 1 passed checks and 19 shrink steps (size 2)
+</span></span><span style="display:flex;"><span>[pbt] s (RFC3339()) = &#34;1970-01-01T00:00:00z&#34;
+</span></span><span style="display:flex;"><span>[pbt] error: time.Parse rejects 1970-01-01T00:00:00z: parsing time &#34;1970-01-01T00:00:00z&#34; as &#34;2006-01-02T15:04:05Z07:00&#34;: cannot parse &#34;z&#34; as &#34;Z07:00&#34;
+</span></span><span style="display:flex;"><span>[pbt] reproduce: go test -run &#39;TestRFC3339&#39; -pbt.seed=0x1
+</span></span></code></pre><p>RFC 3339 allows a lower-case <code>z</code> and <code>t</code>, and <code>time.Parse</code> rejects them, as it rejects the leap second <code>23:59:60</code>. Whether that matters depends on where your timestamps come from. The property makes the decision visible, and the shrunk case shows the difference in one character. The documentation of each generator lists the differences between the standard and the parsers of Go's standard library, as measured on Go 1.26. The tests of the package pin them.</p>
+<h2 id="testing-what-a-program-writes">Testing what a program writes</h2>
+<p>For the input of a program, the plain names give values that every reasonable consumer accepts. A sign-up form can store <code>format.Email()</code> and expect <code>net/mail</code> to read the same address back.</p>
+<pre style="background-color:#f7f7f7;-webkit-text-size-adjust:none;"><code><span style="display:flex;"><span><span style="color:#57606a">// A sign-up form stores the address it receives, and the confirmation mail</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#57606a">// must reach the same mailbox.</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#cf222e">func</span><span style="color:#fff"> </span><span style="color:#6639ba">TestSignupAddresses</span><span style="color:#1f2328">(</span><span style="color:#1f2328">t</span><span style="color:#fff"> </span><span style="color:#0550ae">*</span><span style="color:#1f2328">testing</span><span style="color:#1f2328">.</span><span style="color:#1f2328">T</span><span style="color:#1f2328">)</span><span style="color:#fff"> </span><span style="color:#1f2328">{</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#6639ba">Check</span><span style="color:#1f2328">(</span><span style="color:#1f2328">t</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#cf222e">func</span><span style="color:#1f2328">(</span><span style="color:#1f2328">t</span><span style="color:#fff"> </span><span style="color:#0550ae">*</span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#1f2328">T</span><span style="color:#1f2328">)</span><span style="color:#fff"> </span><span style="color:#1f2328">{</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">		</span><span style="color:#1f2328">email</span><span style="color:#fff"> </span><span style="color:#0550ae">:=</span><span style="color:#fff"> </span><span style="color:#1f2328">format</span><span style="color:#1f2328">.</span><span style="color:#6639ba">Email</span><span style="color:#1f2328">().</span><span style="color:#6639ba">Draw</span><span style="color:#1f2328">(</span><span style="color:#1f2328">t</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#0a3069">&#34;email&#34;</span><span style="color:#1f2328">)</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">		</span><span style="color:#1f2328">addr</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#1f2328">err</span><span style="color:#fff"> </span><span style="color:#0550ae">:=</span><span style="color:#fff"> </span><span style="color:#1f2328">mail</span><span style="color:#1f2328">.</span><span style="color:#6639ba">ParseAddress</span><span style="color:#1f2328">(</span><span style="color:#1f2328">email</span><span style="color:#1f2328">)</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">		</span><span style="color:#cf222e">if</span><span style="color:#fff"> </span><span style="color:#1f2328">err</span><span style="color:#fff"> </span><span style="color:#0550ae">!=</span><span style="color:#fff"> </span><span style="color:#cf222e">nil</span><span style="color:#fff"> </span><span style="color:#0550ae">||</span><span style="color:#fff"> </span><span style="color:#1f2328">addr</span><span style="color:#1f2328">.</span><span style="color:#1f2328">Address</span><span style="color:#fff"> </span><span style="color:#0550ae">!=</span><span style="color:#fff"> </span><span style="color:#1f2328">email</span><span style="color:#fff"> </span><span style="color:#1f2328">{</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">			</span><span style="color:#1f2328">t</span><span style="color:#1f2328">.</span><span style="color:#6639ba">Fatalf</span><span style="color:#1f2328">(</span><span style="color:#0a3069">&#34;mail.ParseAddress(%q) = %v, %v&#34;</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#1f2328">email</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#1f2328">addr</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#1f2328">err</span><span style="color:#1f2328">)</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">		</span><span style="color:#1f2328">}</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#1f2328">})</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#1f2328">}</span><span style="color:#fff">
+</span></span></span></code></pre><p>The generators lean toward the cases that break code, as the generators of chapter 1 do. In a share of the cases:</p>
+<ul>
+<li><code>Email</code> makes local parts of exactly 64 characters, and <code>Hostname</code> makes names of exactly 253.</li>
+<li><code>RFC3339</code> writes leap seconds and the offset <code>-00:00</code>.</li>
+<li><code>JSON</code> writes numbers far beyond 64 bits and unpaired surrogate escapes.</li>
+</ul>
+<p>The documentation of each generator says how often.</p>
+<pre style="background-color:#f7f7f7;-webkit-text-size-adjust:none;"><code><span style="display:flex;"><span><span style="color:#cf222e">func</span><span style="color:#fff"> </span><span style="color:#6639ba">TestDecoders</span><span style="color:#1f2328">(</span><span style="color:#1f2328">t</span><span style="color:#fff"> </span><span style="color:#0550ae">*</span><span style="color:#1f2328">testing</span><span style="color:#1f2328">.</span><span style="color:#1f2328">T</span><span style="color:#1f2328">)</span><span style="color:#fff"> </span><span style="color:#1f2328">{</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#6639ba">Check</span><span style="color:#1f2328">(</span><span style="color:#1f2328">t</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#cf222e">func</span><span style="color:#1f2328">(</span><span style="color:#1f2328">t</span><span style="color:#fff"> </span><span style="color:#0550ae">*</span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#1f2328">T</span><span style="color:#1f2328">)</span><span style="color:#fff"> </span><span style="color:#1f2328">{</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">		</span><span style="color:#1f2328">doc</span><span style="color:#fff"> </span><span style="color:#0550ae">:=</span><span style="color:#fff"> </span><span style="color:#1f2328">format</span><span style="color:#1f2328">.</span><span style="color:#6639ba">JSON</span><span style="color:#1f2328">().</span><span style="color:#6639ba">Draw</span><span style="color:#1f2328">(</span><span style="color:#1f2328">t</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#0a3069">&#34;doc&#34;</span><span style="color:#1f2328">)</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">		</span><span style="color:#cf222e">if</span><span style="color:#fff"> </span><span style="color:#1f2328">!</span><span style="color:#1f2328">json</span><span style="color:#1f2328">.</span><span style="color:#6639ba">Valid</span><span style="color:#1f2328">([]</span><span style="color:#6639ba">byte</span><span style="color:#1f2328">(</span><span style="color:#1f2328">doc</span><span style="color:#1f2328">))</span><span style="color:#fff"> </span><span style="color:#1f2328">{</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">			</span><span style="color:#1f2328">t</span><span style="color:#1f2328">.</span><span style="color:#6639ba">Fatalf</span><span style="color:#1f2328">(</span><span style="color:#0a3069">&#34;json.Valid rejects %s&#34;</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#1f2328">doc</span><span style="color:#1f2328">)</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">		</span><span style="color:#1f2328">}</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">		</span><span style="color:#1f2328">link</span><span style="color:#fff"> </span><span style="color:#0550ae">:=</span><span style="color:#fff"> </span><span style="color:#1f2328">format</span><span style="color:#1f2328">.</span><span style="color:#6639ba">URL</span><span style="color:#1f2328">().</span><span style="color:#6639ba">Draw</span><span style="color:#1f2328">(</span><span style="color:#1f2328">t</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#0a3069">&#34;link&#34;</span><span style="color:#1f2328">)</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">		</span><span style="color:#1f2328">u</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#1f2328">err</span><span style="color:#fff"> </span><span style="color:#0550ae">:=</span><span style="color:#fff"> </span><span style="color:#1f2328">url</span><span style="color:#1f2328">.</span><span style="color:#6639ba">Parse</span><span style="color:#1f2328">(</span><span style="color:#1f2328">link</span><span style="color:#1f2328">)</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">		</span><span style="color:#cf222e">if</span><span style="color:#fff"> </span><span style="color:#1f2328">err</span><span style="color:#fff"> </span><span style="color:#0550ae">!=</span><span style="color:#fff"> </span><span style="color:#cf222e">nil</span><span style="color:#fff"> </span><span style="color:#0550ae">||</span><span style="color:#fff"> </span><span style="color:#1f2328">u</span><span style="color:#1f2328">.</span><span style="color:#1f2328">Host</span><span style="color:#fff"> </span><span style="color:#0550ae">==</span><span style="color:#fff"> </span><span style="color:#0a3069">&#34;&#34;</span><span style="color:#fff"> </span><span style="color:#1f2328">{</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">			</span><span style="color:#1f2328">t</span><span style="color:#1f2328">.</span><span style="color:#6639ba">Fatalf</span><span style="color:#1f2328">(</span><span style="color:#0a3069">&#34;url.Parse(%q) = %v, %v&#34;</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#1f2328">link</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#1f2328">u</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#1f2328">err</span><span style="color:#1f2328">)</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">		</span><span style="color:#1f2328">}</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">		</span><span style="color:#1f2328">at</span><span style="color:#fff"> </span><span style="color:#0550ae">:=</span><span style="color:#fff"> </span><span style="color:#1f2328">format</span><span style="color:#1f2328">.</span><span style="color:#6639ba">Time</span><span style="color:#1f2328">(</span><span style="color:#1f2328">time</span><span style="color:#1f2328">.</span><span style="color:#1f2328">RFC1123Z</span><span style="color:#1f2328">).</span><span style="color:#6639ba">Draw</span><span style="color:#1f2328">(</span><span style="color:#1f2328">t</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#0a3069">&#34;at&#34;</span><span style="color:#1f2328">)</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">		</span><span style="color:#cf222e">if</span><span style="color:#fff"> </span><span style="color:#1f2328">_</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#1f2328">err</span><span style="color:#fff"> </span><span style="color:#0550ae">:=</span><span style="color:#fff"> </span><span style="color:#1f2328">time</span><span style="color:#1f2328">.</span><span style="color:#6639ba">Parse</span><span style="color:#1f2328">(</span><span style="color:#1f2328">time</span><span style="color:#1f2328">.</span><span style="color:#1f2328">RFC1123Z</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#1f2328">at</span><span style="color:#1f2328">);</span><span style="color:#fff"> </span><span style="color:#1f2328">err</span><span style="color:#fff"> </span><span style="color:#0550ae">!=</span><span style="color:#fff"> </span><span style="color:#cf222e">nil</span><span style="color:#fff"> </span><span style="color:#1f2328">{</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">			</span><span style="color:#1f2328">t</span><span style="color:#1f2328">.</span><span style="color:#6639ba">Fatal</span><span style="color:#1f2328">(</span><span style="color:#1f2328">err</span><span style="color:#1f2328">)</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">		</span><span style="color:#1f2328">}</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#1f2328">})</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#1f2328">}</span><span style="color:#fff">
+</span></span></span></code></pre><h2 id="how-the-values-shrink">How the values shrink</h2>
+<p>Values shrink toward short valid strings: <code>a@a.aa</code> for <code>Email</code>, <code>http://a</code> for <code>URL</code>, <code>1970-01-01T00:00:00Z</code> for <code>RFC3339</code>, <code>null</code> for <code>JSON</code>. The shrinker prefers fewer choices, so a part can also shrink within the alternative it started from. A quoted local part, for example, shrinks toward the empty quoted string, <code>&quot;&quot;@a</code>. The documentation of each generator lists the targets of every alternative.</p>
+<h2 id="what-the-package-leaves-out">What the package leaves out</h2>
+<p>The package generates syntax, not registered values.</p>
+<ul>
+<li>A language tag is well-formed, but its subtags are not checked against the IANA registry.</li>
+<li>A payment card number has a correct check digit, but no issuer assigned it.</li>
+<li>An ISBN is not hyphenated, since the hyphens depend on ranges that the ISBN agency publishes.</li>
+</ul>
+<p>The package has no tables that follow a registry, such as the country codes of ISO 3166 or the currencies of ISO 4217, because they change with the registry. Write them with <code>SampledFrom</code> over the values your program supports.</p>
+
+<div class="pager">
+<span>← <a href="09-types">Generators from types</a></span>
+<span><a href="11-reference">Where to go next</a> →</span>
+</div>
+<footer>pbt user guide for pbt v0.4.0 · <a href="https://github.com/ymotongpoo/pbt/tree/main/docs/guide">source</a> · Apache License 2.0</footer>
+</main>
+</div>
+</body>
+</html>

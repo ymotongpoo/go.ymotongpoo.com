@@ -52,7 +52,7 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 <div class="layout">
 <nav class="side">
 <h1><a href="./">pbt 利用ガイド</a></h1>
-<div class="version">pbt v0.3.3</div>
+<div class="version">pbt v0.4.0</div>
 <ol>
 <li><a href="./">はじめに</a></li>
 <li><a href="01-generators">生成器</a></li>
@@ -64,7 +64,8 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 <li><a href="07-fsm">状態機械</a></li>
 <li><a href="08-targeted">標的型探索と存在性</a></li>
 <li><a href="09-types">型から導く生成器</a></li>
-<li><a href="10-reference">次に読むもの</a></li>
+<li><a href="10-formats">規格が定める形式</a></li>
+<li><a href="11-reference">次に読むもの</a></li>
 </ol>
 <div class="lang"><a href="../03-shrinking">English</a></div>
 <div class="lang"><a href="https://pkg.go.dev/go.ymotongpoo.com/pbt">pkg.go.dev</a> · <a href="https://github.com/ymotongpoo/pbt">GitHub</a></div>
@@ -74,7 +75,7 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 <h1 id="heading">縮小</h1>
 <p>ケースが失敗すると、pbtは同じ失敗をするもっと単純なケースを探し、そちらを報告します。この探索はすべての生成器について自動で働きます。<code>Custom</code>、<code>Map</code>、<code>Bind</code> で自分が書いた生成器も含みます。「単純」が何を意味するか、探索をどう導くか、探索が何をしないかを説明します。</p>
 <h2 id="heading-1">ケースが縮む仕組み</h2>
-<p>プロパティが取り出すすべての値は選択の列から決まり、pbtはケースごとにその列を記録しています。縮小器はこの列を書き換えます。1回の取り出しに属する選択を削り、数を下げ、ひとまとまりの選択を前の選択肢へ動かし、要素を並べ替え、書き換えた列から値を作り直します。候補が現在のケースと置き換わるのは、プロパティがまだ失敗し、かつ列が短くなるか、同じ長さで辞書順に小さくなるときです。どの操作も進まなくなるか、縮小の時間（デフォルトで30秒）を使い切るまで、操作を繰り返します。</p>
+<p>プロパティが取り出すすべての値は選択の列から決まり、pbtはケースごとにその列を記録しています。縮小器はこの列を書き換えます。1回の取り出しに属する選択を削り、数を下げ、ひとまとまりの選択を前の選択肢へ動かし、要素を並べ替え、書き換えた列から値を作り直します。候補が現在のケースと置き換わるのは、プロパティがまだ失敗し、かつ列が短くなるか、同じ長さで辞書順に小さくなるときです。縮小器は、選択肢を選ぶ選択と、生成器が要素より先に取り出す長さも下げます。その結果、新しい値が古い値より少ない選択で済むことがあります。縮小器は古い値の後に続いていた選択をつなぎ直すので、その後の取り出しは値を保ちます。どの操作も進まなくなるか、縮小の時間（デフォルトで30秒）を使い切るまで、操作を繰り返します。</p>
 <p>縮小器は値ではなく選択に対して働くので、<code>Map</code> や <code>Bind</code> で組んだ値のために特別な準備は要りません。縮小器が下にある選択を書き換え、関数が値を作り直します。探索の向きは、各生成器が小さな選択から何を作るかで決まります。</p>
 <table>
 <thead>
@@ -102,7 +103,7 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 </tr>
 <tr>
 <td><code>SampledFrom</code>、<code>OneOf</code>、<code>Frequency</code></td>
-<td>先頭の値、または先頭の選択肢</td>
+<td>先頭の値、または先頭の選択肢。ただし現在の選択肢より多くの選択を必要としない場合に限る</td>
 </tr>
 <tr>
 <td><code>Just</code></td>
@@ -114,7 +115,34 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 </tr>
 </tbody>
 </table>
-<h2 id="heading-2">探索を導く</h2>
+<h2 id="heading-2">よく縮む生成器を書く</h2>
+<p>縮小器は、1回の取り出しの選択を、その中で入れ子になった取り出しの選択も含めて、ひとまとまりとして書き換えます。このまとまりを役立つ形に保つ書き方が2つあります。</p>
+<ul>
+<li>選択肢は、分岐全体を取り出す生成器として書き、そうした生成器のどれにするかを <code>OneOf</code> か <code>Frequency</code> で選んでください。先に添字を取り出して、その値で <code>switch</code> する書き方は避けてください。分岐の選択が添字のまとまりの外に出てしまい、分岐を切り替えると後に続く取り出しが乱れます。</li>
+<li>1つの <code>Custom</code> の中で、先に長さを、その後に要素を取り出してください。そうすると、長さを下げたときに末尾の要素が取り除かれ、この生成器の後に続く値は保たれます。</li>
+</ul>
+<pre style="background-color:#f7f7f7;-webkit-text-size-adjust:none;"><code><span style="display:flex;"><span><span style="color:#57606a">// Each alternative draws its whole value, so the choice of the alternative</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#57606a">// and the choices of its value sit in one span, and the shrinker can switch</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#57606a">// from the phone number to the shorter e-mail address without disturbing</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#57606a">// the draws that follow.</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#cf222e">var</span><span style="color:#fff"> </span><span style="color:#1f2328">contact</span><span style="color:#fff"> </span><span style="color:#1f2328">=</span><span style="color:#fff"> </span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#6639ba">OneOf</span><span style="color:#1f2328">(</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#6639ba">Custom</span><span style="color:#1f2328">(</span><span style="color:#0a3069">&#34;email&#34;</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#cf222e">func</span><span style="color:#1f2328">(</span><span style="color:#1f2328">t</span><span style="color:#fff"> </span><span style="color:#0550ae">*</span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#1f2328">T</span><span style="color:#1f2328">)</span><span style="color:#fff"> </span><span style="color:#cf222e">string</span><span style="color:#fff"> </span><span style="color:#1f2328">{</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">		</span><span style="color:#cf222e">return</span><span style="color:#fff"> </span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#6639ba">SampledFrom</span><span style="color:#1f2328">([]</span><span style="color:#cf222e">string</span><span style="color:#1f2328">{</span><span style="color:#0a3069">&#34;alice&#34;</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#0a3069">&#34;bob&#34;</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#0a3069">&#34;carol&#34;</span><span style="color:#1f2328">}).</span><span style="color:#6639ba">Draw</span><span style="color:#1f2328">(</span><span style="color:#1f2328">t</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#0a3069">&#34;&#34;</span><span style="color:#1f2328">)</span><span style="color:#fff"> </span><span style="color:#0550ae">+</span><span style="color:#fff"> </span><span style="color:#0a3069">&#34;@example.com&#34;</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#1f2328">}),</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#6639ba">Custom</span><span style="color:#1f2328">(</span><span style="color:#0a3069">&#34;phone&#34;</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#cf222e">func</span><span style="color:#1f2328">(</span><span style="color:#1f2328">t</span><span style="color:#fff"> </span><span style="color:#0550ae">*</span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#1f2328">T</span><span style="color:#1f2328">)</span><span style="color:#fff"> </span><span style="color:#cf222e">string</span><span style="color:#fff"> </span><span style="color:#1f2328">{</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">		</span><span style="color:#cf222e">return</span><span style="color:#fff"> </span><span style="color:#1f2328">fmt</span><span style="color:#1f2328">.</span><span style="color:#6639ba">Sprintf</span><span style="color:#1f2328">(</span><span style="color:#0a3069">&#34;+81-%d-%04d&#34;</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#6639ba">IntRange</span><span style="color:#1f2328">(</span><span style="color:#0550ae">10</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#0550ae">99</span><span style="color:#1f2328">).</span><span style="color:#6639ba">Draw</span><span style="color:#1f2328">(</span><span style="color:#1f2328">t</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#0a3069">&#34;&#34;</span><span style="color:#1f2328">),</span><span style="color:#fff"> </span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#6639ba">IntRange</span><span style="color:#1f2328">(</span><span style="color:#0550ae">0</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#0550ae">9999</span><span style="color:#1f2328">).</span><span style="color:#6639ba">Draw</span><span style="color:#1f2328">(</span><span style="color:#1f2328">t</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#0a3069">&#34;&#34;</span><span style="color:#1f2328">))</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#1f2328">}),</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#1f2328">)</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#cf222e">var</span><span style="color:#fff"> </span><span style="color:#1f2328">contactProperty</span><span style="color:#fff"> </span><span style="color:#1f2328">=</span><span style="color:#fff"> </span><span style="color:#cf222e">func</span><span style="color:#1f2328">(</span><span style="color:#1f2328">t</span><span style="color:#fff"> </span><span style="color:#0550ae">*</span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#1f2328">T</span><span style="color:#1f2328">)</span><span style="color:#fff"> </span><span style="color:#1f2328">{</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#1f2328">c</span><span style="color:#fff"> </span><span style="color:#0550ae">:=</span><span style="color:#fff"> </span><span style="color:#1f2328">contact</span><span style="color:#1f2328">.</span><span style="color:#6639ba">Draw</span><span style="color:#1f2328">(</span><span style="color:#1f2328">t</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#0a3069">&#34;contact&#34;</span><span style="color:#1f2328">)</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#1f2328">retries</span><span style="color:#fff"> </span><span style="color:#0550ae">:=</span><span style="color:#fff"> </span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#6639ba">IntRange</span><span style="color:#1f2328">(</span><span style="color:#0550ae">0</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#0550ae">10</span><span style="color:#1f2328">).</span><span style="color:#6639ba">Draw</span><span style="color:#1f2328">(</span><span style="color:#1f2328">t</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#0a3069">&#34;retries&#34;</span><span style="color:#1f2328">)</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#cf222e">if</span><span style="color:#fff"> </span><span style="color:#1f2328">retries</span><span style="color:#fff"> </span><span style="color:#1f2328">&gt;</span><span style="color:#fff"> </span><span style="color:#0550ae">3</span><span style="color:#fff"> </span><span style="color:#0550ae">&amp;&amp;</span><span style="color:#fff"> </span><span style="color:#1f2328">!</span><span style="color:#1f2328">strings</span><span style="color:#1f2328">.</span><span style="color:#6639ba">Contains</span><span style="color:#1f2328">(</span><span style="color:#1f2328">c</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#0a3069">&#34;+81-99&#34;</span><span style="color:#1f2328">)</span><span style="color:#fff"> </span><span style="color:#1f2328">{</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">		</span><span style="color:#1f2328">t</span><span style="color:#1f2328">.</span><span style="color:#6639ba">Fatalf</span><span style="color:#1f2328">(</span><span style="color:#0a3069">&#34;gave up after %d retries for %s&#34;</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#1f2328">retries</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#1f2328">c</span><span style="color:#1f2328">)</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#1f2328">}</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#1f2328">}</span><span style="color:#fff">
+</span></span></span></code></pre><p>どのシードでも、最初に失敗したケースの連絡先がどちらであっても、報告には <code>alice@example.com</code> と再試行4回が載ります。ある選択肢に切り替わるのは、その選択肢が現在の選択肢より多くの選択を必要としない場合に限ります。ここでは、メールアドレスは1つ、電話番号は2つの選択を使います。先頭の選択肢がほかより多くの選択を取り出すなら、そこへは届かないことがあります。その場合、ケースは最初に選ばれていた選択肢の中で縮みます。</p>
+<h2 id="heading-3">探索を導く</h2>
 <p>表のとおりの最も単純な値が、最も読みやすい値とは限りません。日付は西暦0年より1970年のほうが考えやすく、時差は720分より数分のほうが何かを語ります。目標を変える生成器が2つあります。</p>
 <pre style="background-color:#f7f7f7;-webkit-text-size-adjust:none;"><code><span style="display:flex;"><span><span style="color:#57606a">// year shrinks toward the 1970s, then the 20th century, rather than toward</span><span style="color:#fff">
 </span></span></span><span style="display:flex;"><span><span style="color:#57606a">// the year 0: the alternatives are tried in order while shrinking and never</span><span style="color:#fff">
@@ -136,13 +164,13 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 </span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#cf222e">return</span><span style="color:#fff"> </span><span style="color:#1f2328">slices</span><span style="color:#1f2328">.</span><span style="color:#6639ba">Concat</span><span style="color:#1f2328">(</span><span style="color:#1f2328">parts</span><span style="color:#0550ae">...</span><span style="color:#1f2328">)</span><span style="color:#fff">
 </span></span></span><span style="display:flex;"><span><span style="color:#1f2328">})</span><span style="color:#fff">
 </span></span></span></code></pre><p>要素が2つ以上あると失敗するプロパティは <code>[]int{1, 1}</code> を報告し、残りの2つの部品は消えます。</p>
-<h2 id="heading-3">値をそのまま保つ</h2>
+<h2 id="heading-4">値をそのまま保つ</h2>
 <p><code>NoShrink</code> は、縮小器が触れてはならない値に印を付けます。不透明なトークンや、テスト対象のシステムが形を決めている入力に使います。縮小しても時間を使うだけだからです。</p>
 <p>コレクションは <code>NoShrink</code> で生成した要素自体を削除できますが、残る要素の値は保たれます。</p>
 <pre style="background-color:#f7f7f7;-webkit-text-size-adjust:none;"><code><span style="display:flex;"><span><span style="color:#57606a">// A token the system under test treats as opaque; shrinking it would only</span><span style="color:#fff">
 </span></span></span><span style="display:flex;"><span><span style="color:#57606a">// slow the search down.</span><span style="color:#fff">
 </span></span></span><span style="display:flex;"><span><span style="color:#cf222e">var</span><span style="color:#fff"> </span><span style="color:#1f2328">token</span><span style="color:#fff"> </span><span style="color:#1f2328">=</span><span style="color:#fff"> </span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#6639ba">NoShrink</span><span style="color:#1f2328">(</span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#6639ba">StringOfN</span><span style="color:#1f2328">(</span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#6639ba">SampledFrom</span><span style="color:#1f2328">([]</span><span style="color:#6639ba">rune</span><span style="color:#1f2328">(</span><span style="color:#0a3069">&#34;0123456789abcdef&#34;</span><span style="color:#1f2328">)),</span><span style="color:#fff"> </span><span style="color:#0550ae">32</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#0550ae">32</span><span style="color:#1f2328">))</span><span style="color:#fff">
-</span></span></span></code></pre><h2 id="heading-4">縮小を観察する</h2>
+</span></span></span></code></pre><h2 id="heading-5">縮小を観察する</h2>
 <p><code>SampleShrink</code> は、値が縮小するときに辿る道筋を返します。PropErの <code>sampleshrink</code> と同じです。自作の生成器が期待した向きに縮むかを確かめる最も手早い方法です。</p>
 <pre style="background-color:#f7f7f7;-webkit-text-size-adjust:none;"><code><span style="display:flex;"><span><span style="color:#cf222e">func</span><span style="color:#fff"> </span><span style="color:#6639ba">TestSampleShrink</span><span style="color:#1f2328">(</span><span style="color:#1f2328">t</span><span style="color:#fff"> </span><span style="color:#0550ae">*</span><span style="color:#1f2328">testing</span><span style="color:#1f2328">.</span><span style="color:#1f2328">T</span><span style="color:#1f2328">)</span><span style="color:#fff"> </span><span style="color:#1f2328">{</span><span style="color:#fff">
 </span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#cf222e">var</span><span style="color:#fff"> </span><span style="color:#1f2328">path</span><span style="color:#fff"> </span><span style="color:#1f2328">[]</span><span style="color:#cf222e">int</span><span style="color:#fff">
@@ -154,7 +182,7 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 </span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#1f2328">}</span><span style="color:#fff">
 </span></span></span><span style="display:flex;"><span><span style="color:#1f2328">}</span><span style="color:#fff">
 </span></span></span></code></pre><p>実際の実行では、<code>Verbose()</code> か <code>-pbt.v</code> を付けると、採用した縮小の各ステップが生成した値とともにログに出ます。</p>
-<h2 id="heading-5">失敗は同じものに保たれる</h2>
+<h2 id="heading-6">失敗は同じものに保たれる</h2>
 <p>ケースは最初にどう失敗したかを記録します。アサーションの行か、パニックの型と発生位置です。縮小の間、候補が採用されるのは同じ仕方で失敗するときに限ります。この規則は、よくある誤りからあなたを守ります。</p>
 <pre style="background-color:#f7f7f7;-webkit-text-size-adjust:none;"><code><span style="display:flex;"><span><span style="color:#57606a">// Two bugs: a panic for large inputs and a wrong answer for the rest. The</span><span style="color:#fff">
 </span></span></span><span style="display:flex;"><span><span style="color:#57606a">// shrinker keeps the failure it started from, so a panic found at a large</span><span style="color:#fff">
@@ -176,14 +204,32 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 </span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#1f2328">}</span><span style="color:#fff">
 </span></span></span><span style="display:flex;"><span><span style="color:#1f2328">}</span><span style="color:#fff">
 </span></span></span></code></pre><p>最初に失敗したケースが数量3000で、パニックしたとします。この規則がなければ、縮小器は数量を1000より下げ、101がアサーションに失敗することを見つけて、割引の誤りを報告したでしょう。パニックは報告から消えてしまいます。規則があるので、数量は1001まで縮み、報告はパニックを示します。最初の失敗が割引の誤りだったときは、ケースは101へ縮みます。どちらにしても、報告はその実行が見つけたバグを記述します。ステートフルテストは失敗をコマンドと検査の種類で区別するので、あるコマンドの事後条件の失敗が別のコマンドのパニックに変わることはありません。</p>
-<h2 id="heading-6">縮小がしないこと</h2>
-<p>縮小器が到達するのは局所的な最小で、常に全体の最小とは限りません。自身の尺度で単純になる候補しか採用しないので、いったん大きくなる中間段階を要する小さなケースには届きません。値の構造が単純な形を隠している場面のために、<code>LetShrink</code> と <code>ShrinkTo</code> があります。ケースが縮小している間、サイズパラメーターは固定されます。時間の上限は失敗1件あたり30秒で、<code>ShrinkTime</code> か <code>-pbt.shrinktime</code> で変えられます。</p>
+<h2 id="heading-7">失敗が再現しないとき</h2>
+<p>縮小の前に、<code>Check</code> は失敗したケースを同じ選択で1回再実行します。入力だけに依存するプロパティなら、同じ仕方でもう一度失敗します。再実行が通過したり、ケースを破棄したり、別の箇所で失敗したりすることもあります。その場合、プロパティか生成器が、時計、グローバル変数、ゴルーチンの順序など、選択以外の何かに依存しています。このとき報告には <code>HealthFlaky</code> の注記が付きます。</p>
+<pre style="background-color:#f7f7f7;-webkit-text-size-adjust:none;"><code><span style="display:flex;"><span><span style="color:#57606a">// The cache keeps a hit counter across cases, so the outcome of a case</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#57606a">// depends on the cases that ran before it.</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#cf222e">var</span><span style="color:#fff"> </span><span style="color:#1f2328">hits</span><span style="color:#fff"> </span><span style="color:#1f2328">atomic</span><span style="color:#1f2328">.</span><span style="color:#1f2328">Int64</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#cf222e">var</span><span style="color:#fff"> </span><span style="color:#1f2328">flakyProperty</span><span style="color:#fff"> </span><span style="color:#1f2328">=</span><span style="color:#fff"> </span><span style="color:#cf222e">func</span><span style="color:#1f2328">(</span><span style="color:#1f2328">t</span><span style="color:#fff"> </span><span style="color:#0550ae">*</span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#1f2328">T</span><span style="color:#1f2328">)</span><span style="color:#fff"> </span><span style="color:#1f2328">{</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#1f2328">key</span><span style="color:#fff"> </span><span style="color:#0550ae">:=</span><span style="color:#fff"> </span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#6639ba">IntRange</span><span style="color:#1f2328">(</span><span style="color:#0550ae">0</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#0550ae">9</span><span style="color:#1f2328">).</span><span style="color:#6639ba">Draw</span><span style="color:#1f2328">(</span><span style="color:#1f2328">t</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#0a3069">&#34;key&#34;</span><span style="color:#1f2328">)</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#cf222e">if</span><span style="color:#fff"> </span><span style="color:#1f2328">hits</span><span style="color:#1f2328">.</span><span style="color:#6639ba">Add</span><span style="color:#1f2328">(</span><span style="color:#0550ae">1</span><span style="color:#1f2328">)</span><span style="color:#0550ae">%</span><span style="color:#0550ae">7</span><span style="color:#fff"> </span><span style="color:#0550ae">==</span><span style="color:#fff"> </span><span style="color:#0550ae">0</span><span style="color:#fff"> </span><span style="color:#0550ae">&amp;&amp;</span><span style="color:#fff"> </span><span style="color:#1f2328">key</span><span style="color:#fff"> </span><span style="color:#1f2328">&gt;</span><span style="color:#fff"> </span><span style="color:#0550ae">2</span><span style="color:#fff"> </span><span style="color:#1f2328">{</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">		</span><span style="color:#1f2328">t</span><span style="color:#1f2328">.</span><span style="color:#6639ba">Fatalf</span><span style="color:#1f2328">(</span><span style="color:#0a3069">&#34;cache miss for key %d&#34;</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#1f2328">key</span><span style="color:#1f2328">)</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#1f2328">}</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#1f2328">}</span><span style="color:#fff">
+</span></span></span></code></pre><pre style="background-color:#f7f7f7;-webkit-text-size-adjust:none;"><code><span style="display:flex;"><span>[pbt] property failed after 55 passed checks and 3 shrink steps (size 42)
+</span></span><span style="display:flex;"><span>[pbt] key (IntRange(0, 9)) = 4
+</span></span><span style="display:flex;"><span>[pbt] error: cache miss for key 4
+</span></span><span style="display:flex;"><span>[pbt] reproduce: go test -run &#39;TestCache&#39; -pbt.seed=0x1
+</span></span><span style="display:flex;"><span>[pbt] health: HealthFlaky: the failure did not recur when its input was replayed (the replay passed); the original failure was at flaky_test.go:21 (IgnoreHealth(HealthFlaky) hides it)
+</span></span></code></pre><p>それでも <code>Check</code> はケースを縮小して保存します。6章の競合のように、ときどきしか再現しない失敗も失敗だからです。注記は、縮小したケースを再実行しても失敗しないかもしれないことを知らせます。報告を信頼する前に、プロパティを直してください。競合を捕まえた6章の並行テストにはこの注記が付くことがあり、そこでは想定どおりの結果です。</p>
+<h2 id="heading-8">縮小がしないこと</h2>
+<p>縮小器が到達するのは局所的な最小で、常に全体の最小とは限りません。自身の尺度で単純になる候補しか採用しないので、いったん大きくなる中間段階を要する小さなケースには届きません。値の構造が単純な形を隠している場面のために、<code>LetShrink</code> と <code>ShrinkTo</code> があります。ケースが縮小している間、サイズパラメーターは固定されます。時間の上限は失敗1件あたり30秒で、<code>ShrinkTime</code> か <code>-pbt.shrinktime</code> で変えられます。縮小は、この時間の上限か、固定された200,000ステップの上限で止まることがあります。その場合、もっと小さなケースが存在するかもしれないので、報告に <code>HealthShrink</code> の注記が付きます。</p>
 
 <div class="pager">
 <span>← <a href="02-distribution">サイズ、分布、統計</a></span>
 <span><a href="04-properties">プロパティと実行</a> →</span>
 </div>
-<footer>pbt 利用ガイド for pbt v0.3.3 · <a href="https://github.com/ymotongpoo/pbt/tree/main/docs/guide">source</a> · Apache License 2.0</footer>
+<footer>pbt 利用ガイド for pbt v0.4.0 · <a href="https://github.com/ymotongpoo/pbt/tree/main/docs/guide">source</a> · Apache License 2.0</footer>
 </main>
 </div>
 </body>

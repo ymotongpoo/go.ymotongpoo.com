@@ -141,3 +141,49 @@ var rareCoverProperty = func(t *pbt.T) {
 観測された割合は `IntRange` についても教えてくれます。
 0は境界値なので、1000分の1よりずっと頻繫に出ているのです。
 統計はそれを知る手段で、一様な分布がプロパティに必要なときに分布を変える手段が `Frequency` や `SampledFrom` です。
+
+## ヘルスチェック
+
+統計は、利用者が立てた問いに答えます。
+ヘルスチェックは、利用者が思い付かないかもしれない問い、つまり実行がケースを無駄なく使っているかに答えます。
+`Check` はすべての実行を監視し、入力に関する3つの問題を警告します。
+
+| 検査 | 警告する条件 |
+| --- | --- |
+| `HealthFilter` | ケースの半数以上（かつ20件以上）が、`Assume`、`Skip`、または引き直しを諦めた `Filter` で破棄された。または、`Filter` が100個以上の値のうち9割を却下した |
+| `HealthLarge` | ケースの5分の1が、それぞれ10,000個を超える選択を取り出した |
+| `HealthSlow` | プロパティ自身の処理を除いた値の取り出しに、1ケースあたり10ミリ秒、合計で1秒かかった |
+
+長い文字列だけを残すプロパティでは、表の最初の検査 `HealthFilter` が警告を出します。
+
+```go
+// Most strings that String draws at small sizes are shorter than eight
+// runes, so Assume throws most cases away.
+var longNameProperty = func(t *pbt.T) {
+	name := pbt.String().Draw(t, "name")
+	t.Assume(len([]rune(name)) >= 8)
+	if short := []rune(name)[:8]; len(short) != 8 {
+		t.Fatalf("prefix %q", string(short))
+	}
+}
+```
+
+```text
+[pbt] health: HealthFilter: 629 of 729 cases were discarded; most by Assume at health_test.go:18 (629) (CheckHealth(HealthFilter) makes this fail; IgnoreHealth(HealthFilter) hides it)
+```
+
+実行は通過しましたが、100ケースを得るために729ケースを走らせており、警告は残りを捨てた行を示しています。
+長い文字列を組む生成器 `StringN(8, 40)` を使えば、この無駄はなくなります。
+警告は、破棄や却下の多かった箇所を示します。
+`Filter` ならその説明、`Assume` や `Skip` なら呼び出した行です。
+`HealthLarge` は、最も多くの選択を使った取り出しを示します。
+
+ヘルスチェックはデフォルトでは `Cover` と同じく警告だけを出し、実行は通過します。
+`CheckHealth()` を付けると、`HealthFilter` か `HealthLarge` の警告が出た実行は、プロパティが通過していても失敗になります。
+`CheckHealth(HealthSlow)` は時間の検査を加えます。
+負荷の高いCIマシンでは引っかかることがあるので、この検査はデフォルトでは含めていません。
+`IgnoreHealth(checks...)` は検査を隠し、`CheckHealth` より優先されます。
+フラグ `-pbt.checkhealth` と `-pbt.ignorehealth` は同じ検査を名前で受け取り、`go test` の実行中のすべての `Check` に効きます。
+例えば `-pbt.checkhealth=default,slow` です。
+失敗した実行には、さらに `HealthFlaky` と `HealthShrink` の2つの検査が働きます。
+この2つは3章で説明します。

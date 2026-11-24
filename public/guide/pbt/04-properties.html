@@ -52,7 +52,7 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 <div class="layout">
 <nav class="side">
 <h1><a href="./">pbt user guide</a></h1>
-<div class="version">pbt v0.3.3</div>
+<div class="version">pbt v0.4.0</div>
 <ol>
 <li><a href="./">Getting started</a></li>
 <li><a href="01-generators">Generators</a></li>
@@ -64,7 +64,8 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 <li><a href="07-fsm">State machines</a></li>
 <li><a href="08-targeted">Targeted search and existence</a></li>
 <li><a href="09-types">Generators from types</a></li>
-<li><a href="10-reference">Where to go next</a></li>
+<li><a href="10-formats">Standard formats</a></li>
+<li><a href="11-reference">Where to go next</a></li>
 </ol>
 <div class="lang"><a href="ja/04-properties">日本語</a></div>
 <div class="lang"><a href="https://pkg.go.dev/go.ymotongpoo.com/pbt">pkg.go.dev</a> · <a href="https://github.com/ymotongpoo/pbt">GitHub</a></div>
@@ -74,7 +75,7 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 <h1 id="properties-and-runs">Properties and runs</h1>
 <p>This chapter covers the shape of a run: how many cases, which sizes, how discards are handled, what runs before and after a case, how properties combine, and how a failure is reproduced.</p>
 <h2 id="options-and-flags">Options and flags</h2>
-<p>Every setting has a flag for the whole <code>go test</code> run and an option for one <code>Check</code> call. Options win over flags.</p>
+<p>Most settings have a flag for the whole <code>go test</code> run and an option for one <code>Check</code> call. Options win over flags, except for the health checks, where the flags and the options add up.</p>
 <table>
 <thead>
 <tr>
@@ -108,6 +109,12 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 <td><code>ShrinkTime(d)</code></td>
 <td>30s</td>
 <td>time budget for shrinking one failure</td>
+</tr>
+<tr>
+<td><code>-pbt.failures</code></td>
+<td><code>MaxFailures(n)</code></td>
+<td>1</td>
+<td>distinct failures to collect, shrink and report</td>
 </tr>
 <tr>
 <td><code>-pbt.searchsteps</code></td>
@@ -156,6 +163,18 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 <td><code>CheckCoverage()</code></td>
 <td>false</td>
 <td>fail on an unmet or undecided <code>Cover</code> requirement</td>
+</tr>
+<tr>
+<td><code>-pbt.checkhealth</code></td>
+<td><code>CheckHealth(checks...)</code></td>
+<td>none</td>
+<td>health checks that fail a passing run (chapter 2)</td>
+</tr>
+<tr>
+<td><code>-pbt.ignorehealth</code></td>
+<td><code>IgnoreHealth(checks...)</code></td>
+<td>none</td>
+<td>health checks to hide</td>
 </tr>
 <tr>
 <td></td>
@@ -295,15 +314,36 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 </span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#6639ba">Check</span><span style="color:#1f2328">(</span><span style="color:#1f2328">t</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#6639ba">NoPanic</span><span style="color:#1f2328">(</span><span style="color:#1f2328">strings</span><span style="color:#1f2328">.</span><span style="color:#1f2328">Repeat</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#6639ba">WithType</span><span style="color:#1f2328">(</span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#6639ba">IntRange</span><span style="color:#1f2328">(</span><span style="color:#0550ae">0</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#0550ae">3</span><span style="color:#1f2328">))))</span><span style="color:#fff">
 </span></span></span><span style="display:flex;"><span><span style="color:#1f2328">}</span><span style="color:#fff">
 </span></span></span></code></pre><p><code>Recover</code> runs a function and returns what it panicked with, or nil, so a property can assert that invalid input panics. <code>NoPanic</code> takes a function and generates its arguments with <code>Make</code>, which chapter 9 describes; the <code>WithType</code> and <code>WithField</code> options narrow the arguments.</p>
+<h2 id="several-failures-in-one-run">Several failures in one run</h2>
+<p>A run normally stops at the first failure, shrinks it and reports it. A function with two bugs then shows them one at a time: you fix the first and run again to meet the second. <code>MaxFailures(n)</code> or <code>-pbt.failures=n</code> keeps the run going after a failure. It collects up to <code>n</code> failures that fail in different ways, shrinks each one, saves each one and reports each one.</p>
+<pre style="background-color:#f7f7f7;-webkit-text-size-adjust:none;"><code><span style="display:flex;"><span><span style="color:#cf222e">var</span><span style="color:#fff"> </span><span style="color:#1f2328">portProperty</span><span style="color:#fff"> </span><span style="color:#1f2328">=</span><span style="color:#fff"> </span><span style="color:#cf222e">func</span><span style="color:#1f2328">(</span><span style="color:#1f2328">t</span><span style="color:#fff"> </span><span style="color:#0550ae">*</span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#1f2328">T</span><span style="color:#1f2328">)</span><span style="color:#fff"> </span><span style="color:#1f2328">{</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#1f2328">s</span><span style="color:#fff"> </span><span style="color:#0550ae">:=</span><span style="color:#fff"> </span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#6639ba">StringOf</span><span style="color:#1f2328">(</span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#6639ba">SampledFrom</span><span style="color:#1f2328">([]</span><span style="color:#6639ba">rune</span><span style="color:#1f2328">(</span><span style="color:#0a3069">&#34;0123456789&#34;</span><span style="color:#1f2328">))).</span><span style="color:#6639ba">Draw</span><span style="color:#1f2328">(</span><span style="color:#1f2328">t</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#0a3069">&#34;s&#34;</span><span style="color:#1f2328">)</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#1f2328">n</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#1f2328">ok</span><span style="color:#fff"> </span><span style="color:#0550ae">:=</span><span style="color:#fff"> </span><span style="color:#6639ba">parsePort</span><span style="color:#1f2328">(</span><span style="color:#1f2328">s</span><span style="color:#1f2328">)</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#cf222e">if</span><span style="color:#fff"> </span><span style="color:#1f2328">ok</span><span style="color:#fff"> </span><span style="color:#0550ae">&amp;&amp;</span><span style="color:#fff"> </span><span style="color:#1f2328">!</span><span style="color:#6639ba">validPort</span><span style="color:#1f2328">(</span><span style="color:#1f2328">s</span><span style="color:#1f2328">)</span><span style="color:#fff"> </span><span style="color:#1f2328">{</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">		</span><span style="color:#1f2328">t</span><span style="color:#1f2328">.</span><span style="color:#6639ba">Fatalf</span><span style="color:#1f2328">(</span><span style="color:#0a3069">&#34;parsePort(%q) accepted %d&#34;</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#1f2328">s</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#1f2328">n</span><span style="color:#1f2328">)</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#1f2328">}</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#cf222e">if</span><span style="color:#fff"> </span><span style="color:#1f2328">!</span><span style="color:#1f2328">ok</span><span style="color:#fff"> </span><span style="color:#0550ae">&amp;&amp;</span><span style="color:#fff"> </span><span style="color:#6639ba">validPort</span><span style="color:#1f2328">(</span><span style="color:#1f2328">s</span><span style="color:#1f2328">)</span><span style="color:#fff"> </span><span style="color:#1f2328">{</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">		</span><span style="color:#1f2328">t</span><span style="color:#1f2328">.</span><span style="color:#6639ba">Fatalf</span><span style="color:#1f2328">(</span><span style="color:#0a3069">&#34;parsePort(%q) rejected a valid port&#34;</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#1f2328">s</span><span style="color:#1f2328">)</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#1f2328">}</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#1f2328">}</span><span style="color:#fff">
+</span></span></span></code></pre><pre style="background-color:#f7f7f7;-webkit-text-size-adjust:none;"><code><span style="display:flex;"><span>[pbt] failure 1 of 2: property failed after 6 passed checks and 9 shrink steps (size 4)
+</span></span><span style="display:flex;"><span>[pbt] s (StringOf(SampledFrom(10 values))) = &#34;0&#34;
+</span></span><span style="display:flex;"><span>[pbt] error: parsePort(&#34;0&#34;) accepted 0
+</span></span><span style="display:flex;"><span>[pbt] reproduce: go test -run &#39;TestPort&#39; -pbt.seed=0x1 -pbt.failures=2
+</span></span><span style="display:flex;"><span>[pbt] failure 2 of 2: property failed after 6 passed checks and 90 shrink steps (size 8)
+</span></span><span style="display:flex;"><span>[pbt] s (StringOf(SampledFrom(10 values))) = &#34;7000&#34;
+</span></span><span style="display:flex;"><span>[pbt] error: parsePort(&#34;7000&#34;) rejected a valid port
+</span></span><span style="display:flex;"><span>[pbt] reproduce: go test -run &#39;TestPort&#39; -pbt.seed=0x1 -pbt.failures=2
+</span></span></code></pre><p>Two failures are different when they fail at different lines, or panic with different types or at different places. That is the same identity that keeps a shrink on one bug (chapter 3). A failure that the shrinker meets on the way, failing in a new way, becomes one of the <code>n</code> as well. Each failure gets the full <code>ShrinkTime</code> budget. The second minimum, 7000, is a local one. The true boundary is 6554, but the path to it needs a larger digit in a later place, and the shrinker does not try that. Saved failures replay together, and a run that replays a failing saved case does not search for more. <code>CheckExists</code> ignores the option.</p>
 <h2 id="seeds-saved-cases-and-replay">Seeds, saved cases and replay</h2>
-<p>Every report ends with a <code>reproduce:</code> line that carries the seed of the run. Passing that seed with <code>-pbt.seed</code> repeats the same sequence of cases, including the failing one, on the same version of both the property code and pbt. Updating pbt can change the generated cases for a seed. In v0.3.2 the integer generation fix changes some seeded runs; existing saved choice sequences still replay as before.</p>
+<p>Every report ends with a <code>reproduce:</code> line that carries the seed of the run. Passing that seed with <code>-pbt.seed</code> repeats the same sequence of cases, including the failing one, on the same version of both the property code and pbt. Updating pbt can change the generated cases for a seed. In v0.3.2 the integer generation fix changes some seeded runs. In v0.4.0, <code>Make</code> generates different values for some recursive types, and the shrinker can reach other, smaller cases. A saved case replays its choices through the generators of the installed version. After an upgrade, a saved case of a property that uses <code>Make</code> on a recursive type can produce a different value.</p>
 <p>The failing case is also saved under <code>testdata/pbt/&lt;TestName&gt;/&lt;hash&gt;</code> as a text file with the size, the drawn values as comments, and the choices. Every later <code>Check</code> of the same test replays the saved cases before generating new ones and fails if one still fails, so the regression case follows the code into version control. Delete the file to drop the case. Three options adjust this behavior: <code>NoSave</code> keeps a run from writing, <code>NoReplay</code> skips the saved cases, and <code>ReplayFile</code> or <code>-pbt.replay=FILE</code> replays one saved file in any test, which is how you hand a case from one test to another or reproduce a failure from a CI log.</p>
 
 <div class="pager">
 <span>← <a href="03-shrinking">Shrinking</a></span>
 <span><a href="05-stateful">Stateful testing</a> →</span>
 </div>
-<footer>pbt user guide for pbt v0.3.3 · <a href="https://github.com/ymotongpoo/pbt/tree/main/docs/guide">source</a> · Apache License 2.0</footer>
+<footer>pbt user guide for pbt v0.4.0 · <a href="https://github.com/ymotongpoo/pbt/tree/main/docs/guide">source</a> · Apache License 2.0</footer>
 </main>
 </div>
 </body>

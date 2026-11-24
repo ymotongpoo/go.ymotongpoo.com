@@ -11,6 +11,9 @@
 縮小器はこの列を書き換えます。
 1回の取り出しに属する選択を削り、数を下げ、ひとまとまりの選択を前の選択肢へ動かし、要素を並べ替え、書き換えた列から値を作り直します。
 候補が現在のケースと置き換わるのは、プロパティがまだ失敗し、かつ列が短くなるか、同じ長さで辞書順に小さくなるときです。
+縮小器は、選択肢を選ぶ選択と、生成器が要素より先に取り出す長さも下げます。
+その結果、新しい値が古い値より少ない選択で済むことがあります。
+縮小器は古い値の後に続いていた選択をつなぎ直すので、その後の取り出しは値を保ちます。
 どの操作も進まなくなるか、縮小の時間（デフォルトで30秒）を使い切るまで、操作を繰り返します。
 
 縮小器は値ではなく選択に対して働くので、`Map` や `Bind` で組んだ値のために特別な準備は要りません。
@@ -23,9 +26,49 @@
 | `IntRangeToward(lo, hi, center)` | 両側から `center` |
 | `Bool` | `false` |
 | `String`、`SliceOf`、`MapOf` | 要素数を減らし、次に要素を単純にする |
-| `SampledFrom`、`OneOf`、`Frequency` | 先頭の値、または先頭の選択肢 |
+| `SampledFrom`、`OneOf`、`Frequency` | 先頭の値、または先頭の選択肢。ただし現在の選択肢より多くの選択を必要としない場合に限る |
 | `Just` | 縮小するものがない |
 | `Custom`、`Map`、`Bind` | 中で取り出す値の向きに従う |
+
+## よく縮む生成器を書く
+
+縮小器は、1回の取り出しの選択を、その中で入れ子になった取り出しの選択も含めて、ひとまとまりとして書き換えます。
+このまとまりを役立つ形に保つ書き方が2つあります。
+
+- 選択肢は、分岐全体を取り出す生成器として書き、そうした生成器のどれにするかを `OneOf` か `Frequency` で選んでください。
+  先に添字を取り出して、その値で `switch` する書き方は避けてください。
+  分岐の選択が添字のまとまりの外に出てしまい、分岐を切り替えると後に続く取り出しが乱れます。
+- 1つの `Custom` の中で、先に長さを、その後に要素を取り出してください。
+  そうすると、長さを下げたときに末尾の要素が取り除かれ、この生成器の後に続く値は保たれます。
+
+```go
+// Each alternative draws its whole value, so the choice of the alternative
+// and the choices of its value sit in one span, and the shrinker can switch
+// from the phone number to the shorter e-mail address without disturbing
+// the draws that follow.
+var contact = pbt.OneOf(
+	pbt.Custom("email", func(t *pbt.T) string {
+		return pbt.SampledFrom([]string{"alice", "bob", "carol"}).Draw(t, "") + "@example.com"
+	}),
+	pbt.Custom("phone", func(t *pbt.T) string {
+		return fmt.Sprintf("+81-%d-%04d", pbt.IntRange(10, 99).Draw(t, ""), pbt.IntRange(0, 9999).Draw(t, ""))
+	}),
+)
+
+var contactProperty = func(t *pbt.T) {
+	c := contact.Draw(t, "contact")
+	retries := pbt.IntRange(0, 10).Draw(t, "retries")
+	if retries > 3 && !strings.Contains(c, "+81-99") {
+		t.Fatalf("gave up after %d retries for %s", retries, c)
+	}
+}
+```
+
+どのシードでも、最初に失敗したケースの連絡先がどちらであっても、報告には `alice@example.com` と再試行4回が載ります。
+ある選択肢に切り替わるのは、その選択肢が現在の選択肢より多くの選択を必要としない場合に限ります。
+ここでは、メールアドレスは1つ、電話番号は2つの選択を使います。
+先頭の選択肢がほかより多くの選択を取り出すなら、そこへは届かないことがあります。
+その場合、ケースは最初に選ばれていた選択肢の中で縮みます。
 
 ## 探索を導く
 
@@ -147,6 +190,41 @@ var discountProperty = func(t *pbt.T) {
 どちらにしても、報告はその実行が見つけたバグを記述します。
 ステートフルテストは失敗をコマンドと検査の種類で区別するので、あるコマンドの事後条件の失敗が別のコマンドのパニックに変わることはありません。
 
+## 失敗が再現しないとき
+
+縮小の前に、`Check` は失敗したケースを同じ選択で1回再実行します。
+入力だけに依存するプロパティなら、同じ仕方でもう一度失敗します。
+再実行が通過したり、ケースを破棄したり、別の箇所で失敗したりすることもあります。
+その場合、プロパティか生成器が、時計、グローバル変数、ゴルーチンの順序など、選択以外の何かに依存しています。
+このとき報告には `HealthFlaky` の注記が付きます。
+
+```go
+// The cache keeps a hit counter across cases, so the outcome of a case
+// depends on the cases that ran before it.
+var hits atomic.Int64
+
+var flakyProperty = func(t *pbt.T) {
+	key := pbt.IntRange(0, 9).Draw(t, "key")
+	if hits.Add(1)%7 == 0 && key > 2 {
+		t.Fatalf("cache miss for key %d", key)
+	}
+}
+```
+
+```text
+[pbt] property failed after 55 passed checks and 3 shrink steps (size 42)
+[pbt] key (IntRange(0, 9)) = 4
+[pbt] error: cache miss for key 4
+[pbt] reproduce: go test -run 'TestCache' -pbt.seed=0x1
+[pbt] health: HealthFlaky: the failure did not recur when its input was replayed (the replay passed); the original failure was at flaky_test.go:21 (IgnoreHealth(HealthFlaky) hides it)
+```
+
+それでも `Check` はケースを縮小して保存します。
+6章の競合のように、ときどきしか再現しない失敗も失敗だからです。
+注記は、縮小したケースを再実行しても失敗しないかもしれないことを知らせます。
+報告を信頼する前に、プロパティを直してください。
+競合を捕まえた6章の並行テストにはこの注記が付くことがあり、そこでは想定どおりの結果です。
+
 ## 縮小がしないこと
 
 縮小器が到達するのは局所的な最小で、常に全体の最小とは限りません。
@@ -154,3 +232,5 @@ var discountProperty = func(t *pbt.T) {
 値の構造が単純な形を隠している場面のために、`LetShrink` と `ShrinkTo` があります。
 ケースが縮小している間、サイズパラメーターは固定されます。
 時間の上限は失敗1件あたり30秒で、`ShrinkTime` か `-pbt.shrinktime` で変えられます。
+縮小は、この時間の上限か、固定された200,000ステップの上限で止まることがあります。
+その場合、もっと小さなケースが存在するかもしれないので、報告に `HealthShrink` の注記が付きます。

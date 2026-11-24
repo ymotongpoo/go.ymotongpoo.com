@@ -1,4 +1,4 @@
-# pbt 利用ガイド（v0.3.3）
+# pbt 利用ガイド（v0.4.0）
 
 > Goのプロパティベーステストライブラリpbtの利用ガイドを1つのファイルにまとめたものです。文書の索引は https://go.ymotongpoo.com/pbt/guide/llms.txt にあります。
 
@@ -94,7 +94,7 @@ var biggestProperty = func(t *pbt.T) {
 `pbt.Check(t, biggestProperty)` を実行すると、次の報告が出ます。
 
 ```text
-[pbt] property failed after 12 passed checks and 16 shrink steps (size 13)
+[pbt] property failed after 12 passed checks and 20 shrink steps (size 13)
 [pbt] xs (SliceOfN(Int(), 1, -1)) = []int{-1}
 [pbt] error: biggest([-1]) = 0, want -1
 [pbt] saved to testdata/pbt/TestBiggest/5a0c…; go test replays it until the file is deleted
@@ -125,7 +125,8 @@ var biggestProperty = func(t *pbt.T) {
 1章から4章は、生成器、データのサイズと分布、縮小、実行のオプションを扱います。
 5章から7章は、モデルに対するステートフルテスト、並行実行、状態機械を扱います。
 8章は標的型探索と存在性のプロパティ、9章は型から導く生成器です。
-10章では、例題の移植、rapidからの移行ガイド、参照資料を案内します。
+10章は、規格が定める形式の文字列を扱います。
+11章では、例題の移植、rapidからの移行ガイド、参照資料を案内します。
 
 ---
 
@@ -142,7 +143,9 @@ pbtが現在のケースについて記録している選択から `V` を作る
 | --- | --- |
 | 整数 | `Int`、`IntRange`、`IntMin`、`IntMax`、`IntRangeToward`。`Int32`、`Int64`、`Uint`、`Uint32`、`Uint64`、`Byte` とそれぞれの `Range` 版。任意の整数型には `Integer[I]` と `IntegerRange[I]` |
 | 浮動小数点数 | 有限の値には `Float64`、`Float64Range`、`Float32`、`Float32Range`。`AnyFloat64` はNaNと無限大を加える |
-| 文字と文字列 | `Bool`、`Rune`、`String`、`StringN`、`StringOf`、`StringOfN`、`Bytes`、`BytesN` |
+| 文字と文字列 | `Bool`、`Rune`、`RuneIn`、`String`、`StringN`、`StringOf`、`StringOfN`、`StringMatching`、`Bytes`、`BytesN` |
+| 時刻 | `Time`、`TimeRange`、`Duration`、`DurationRange`、`FixedZone`、`Zone` |
+| ネットワーク | `net/netip` の型を返す `IPv4`、`IPv6`、`Addr`、`AddrIn`、`Prefix`、`AddrPort` と、`HardwareAddr` |
 | コレクション | `SliceOf`、`SliceOfN`、`SliceOfDistinct`、`SliceOfNDistinct`、`MapOf`、`MapOfN`、`Permutation` |
 | 選択 | `Just`、`SampledFrom`、`OneOf`、`Frequency`、`Ptr` |
 | 関数 | `Func`、`Func2`。コールバックを受け取るコードのプロパティ向けに、純粋な関数を生成する |
@@ -151,6 +154,93 @@ pbtが現在のケースについて記録している選択から `V` を作る
 整数は、バグが潜みやすい範囲の境界と小さな値に寄ります。
 文字列とコレクションの長さは、ケースのサイズパラメーターに従います。
 最大長の `-1` は上限なしを意味します。
+RFC 3339のタイムスタンプ、メールアドレス、URIなど、規格が定める形式の文字列は、パッケージ `go.ymotongpoo.com/pbt/format` が生成します。
+このパッケージは10章で説明します。
+
+## 時刻とアドレス
+
+時刻とアドレスの生成器も整数と同じ方針で、コードが誤動作しやすい値に寄ります。
+`Time` は、`time.Time` のゼロ値から9999年の終わりまでの時刻を生成します。
+そのうち半分近くは暦の境目へ移します。
+境目とは、日、月、年の最初または最後のナノ秒、2月29日、範囲の端です。
+保存されたタイムスタンプの多くはマイクロ秒、ミリ秒、秒の単位までしか持たないので、一部のケースでは秒未満の端数をそれらの単位に丸めます。
+1か月後の日付を求める計算は、こうした値で誤動作する典型例です。
+
+```go
+var billingProperty = func(t *pbt.T) {
+	start := pbt.Time().Draw(t, "")
+	next := nextBillingDate(start)
+	if want := (start.Month() % 12) + 1; next.Month() != want {
+		t.Fatalf("next billing date %s is not in %s", next.Format(time.DateOnly), want)
+	}
+}
+```
+
+```text
+[pbt] property failed after 39 passed checks and 13 shrink steps (size 40)
+[pbt] start (Time()) = time.Date(1970, time.January, 31, 23, 59, 59, 999999999, time.UTC)
+[pbt] error: next billing date 1970-03-03 is not in February
+[pbt] reproduce: go test -run 'TestBilling' -pbt.seed=0x1
+```
+
+`AddDate` は1月31日の1か月後を正規化して3月3日にします。
+実行は月の最後のナノ秒を見つけました。
+縮小器はそれを、`Time` の縮小先であるUnixエポックの月、1970年1月へ移しました。
+`TimeRange(lo, hi)` は、範囲内の値を `lo` のロケーションで生成します。
+夏時間のあるロケーションでは、オフセットが切り替わる時刻の近くにも値を寄せます。
+切り替わりの瞬間、その1ナノ秒前、前後の30分です。
+`Zone` はIANAのタイムゾーンを読み込み、デフォルトでは規則の変わったゾーンの一覧から選びます。
+`FixedZone` は固定のオフセットを生成します。
+
+アドレスの生成器は `net/netip` の型を返します。
+`IPv4` と `IPv6` は、アドレスの一部をRFC 6890の特殊用途ブロックから生成します。
+ループバック、プライベートネットワーク、リンクローカル、ドキュメント用、マルチキャスト、IPv6ではさらにIPv4射影アドレスがこれに含まれます。
+`AddrIn` は、渡したプレフィックスの中のアドレスだけを生成します。
+
+```go
+// The client of a request is an address inside the private networks of
+// RFC 1918, and the rate limiter keys clients by their /24.
+func TestClientKey(t *testing.T) {
+	private := pbt.AddrIn(
+		netip.MustParsePrefix("10.0.0.0/8"),
+		netip.MustParsePrefix("172.16.0.0/12"),
+		netip.MustParsePrefix("192.168.0.0/16"),
+	)
+	pbt.Check(t, func(t *pbt.T) {
+		client := private.Draw(t, "client")
+		key := netip.PrefixFrom(client, 24).Masked()
+		if !key.Contains(client) || !key.Addr().IsPrivate() {
+			t.Fatalf("key %s does not cover %s", key, client)
+		}
+	})
+}
+```
+
+## パターンに一致する文字列
+
+`StringMatching` は、パッケージ `regexp` の構文で書いた正規表現から文字列を組みます。
+どの値もパターン全体に一致し、縮小しても一致したままです。
+`|` で並べた分岐は前の分岐へ、繰り返しは最小の回数へ、文字クラスはその中で最初の印字可能なASCII文字へ縮みます。
+`RuneIn` は、スクリプトやカテゴリなど、パッケージ `unicode` の範囲表からルーンを生成します。
+表の各範囲が同じ確率で選ばれるので、小さなスクリプトがCJK統合漢字に埋もれることはありません。
+
+```go
+// An order number has two capital letters, a dash and four digits.
+var orderID = regexp.MustCompile(`^[A-Z]{2}-\d{4}$`)
+
+func TestOrderIDs(t *testing.T) {
+	pbt.Check(t, func(t *pbt.T) {
+		id := pbt.StringMatching(`[A-Z]{2}-\d{4}`).Draw(t, "id")
+		if !orderID.MatchString(id) {
+			t.Fatalf("%q is not an order number", id)
+		}
+		name := pbt.StringOfN(pbt.RuneIn(unicode.Hiragana, unicode.Katakana, unicode.Han), 1, 8).Draw(t, "name")
+		if label := fmt.Sprintf("%s %s", id, name); len([]rune(label)) > 16 {
+			t.Fatalf("label %q is too long", label)
+		}
+	})
+}
+```
 
 ## 自分の生成器を作る
 
@@ -226,7 +316,7 @@ var displayNameProperty = func(t *pbt.T) {
 ```
 
 ```text
-[pbt] property failed after 3 passed checks and 145 shrink steps (size 4)
+[pbt] property failed after 3 passed checks and 189 shrink steps (size 4)
 [pbt] user (user) = snippets.User{Name:"aaaaaaaaa", Age:0, Email:"aaaaaaaaa@example.com"}
 [pbt]   name (StringOfN(SampledFrom(26 values), 1, 12)) = "aaaaaaaaa"
 [pbt]   age (IntRange(0, 120)) = 0
@@ -238,6 +328,13 @@ var displayNameProperty = func(t *pbt.T) {
 年齢は失敗に関係しないので0まで縮んでいます。
 報告はラベル付きの値を3段の深さまで載せ、1つの値を2000文字で切ります。
 `ReportDepth` と `ReportLimit` のオプションで両方を変えられます。
+
+プロパティの最上位で取り出した値は、ラベルがなくても報告に載ります。
+上の `start := pbt.Time().Draw(t, "")` のように取り出した値を1つの変数に代入していれば、報告はその変数の名前で値を示します。
+そうでなければ、`Int() at prop_test.go:12 = 5` のように、取り出したファイルと行を示します。
+報告を作るとき、pbtはソースファイルを読んで変数の名前を探します。
+`-trimpath` を付けてビルドしたバイナリのようにファイルを読めないときは、行を示します。
+`Verbose()` か `-pbt.v` を付けると、すべての取り出しに行が付きます。
 
 ## プロパティの外で値を見る
 
@@ -408,6 +505,52 @@ var rareCoverProperty = func(t *pbt.T) {
 0は境界値なので、1000分の1よりずっと頻繫に出ているのです。
 統計はそれを知る手段で、一様な分布がプロパティに必要なときに分布を変える手段が `Frequency` や `SampledFrom` です。
 
+## ヘルスチェック
+
+統計は、利用者が立てた問いに答えます。
+ヘルスチェックは、利用者が思い付かないかもしれない問い、つまり実行がケースを無駄なく使っているかに答えます。
+`Check` はすべての実行を監視し、入力に関する3つの問題を警告します。
+
+| 検査 | 警告する条件 |
+| --- | --- |
+| `HealthFilter` | ケースの半数以上（かつ20件以上）が、`Assume`、`Skip`、または引き直しを諦めた `Filter` で破棄された。または、`Filter` が100個以上の値のうち9割を却下した |
+| `HealthLarge` | ケースの5分の1が、それぞれ10,000個を超える選択を取り出した |
+| `HealthSlow` | プロパティ自身の処理を除いた値の取り出しに、1ケースあたり10ミリ秒、合計で1秒かかった |
+
+長い文字列だけを残すプロパティでは、表の最初の検査 `HealthFilter` が警告を出します。
+
+```go
+// Most strings that String draws at small sizes are shorter than eight
+// runes, so Assume throws most cases away.
+var longNameProperty = func(t *pbt.T) {
+	name := pbt.String().Draw(t, "name")
+	t.Assume(len([]rune(name)) >= 8)
+	if short := []rune(name)[:8]; len(short) != 8 {
+		t.Fatalf("prefix %q", string(short))
+	}
+}
+```
+
+```text
+[pbt] health: HealthFilter: 629 of 729 cases were discarded; most by Assume at health_test.go:18 (629) (CheckHealth(HealthFilter) makes this fail; IgnoreHealth(HealthFilter) hides it)
+```
+
+実行は通過しましたが、100ケースを得るために729ケースを走らせており、警告は残りを捨てた行を示しています。
+長い文字列を組む生成器 `StringN(8, 40)` を使えば、この無駄はなくなります。
+警告は、破棄や却下の多かった箇所を示します。
+`Filter` ならその説明、`Assume` や `Skip` なら呼び出した行です。
+`HealthLarge` は、最も多くの選択を使った取り出しを示します。
+
+ヘルスチェックはデフォルトでは `Cover` と同じく警告だけを出し、実行は通過します。
+`CheckHealth()` を付けると、`HealthFilter` か `HealthLarge` の警告が出た実行は、プロパティが通過していても失敗になります。
+`CheckHealth(HealthSlow)` は時間の検査を加えます。
+負荷の高いCIマシンでは引っかかることがあるので、この検査はデフォルトでは含めていません。
+`IgnoreHealth(checks...)` は検査を隠し、`CheckHealth` より優先されます。
+フラグ `-pbt.checkhealth` と `-pbt.ignorehealth` は同じ検査を名前で受け取り、`go test` の実行中のすべての `Check` に効きます。
+例えば `-pbt.checkhealth=default,slow` です。
+失敗した実行には、さらに `HealthFlaky` と `HealthShrink` の2つの検査が働きます。
+この2つは3章で説明します。
+
 ---
 
 # 縮小
@@ -423,6 +566,9 @@ var rareCoverProperty = func(t *pbt.T) {
 縮小器はこの列を書き換えます。
 1回の取り出しに属する選択を削り、数を下げ、ひとまとまりの選択を前の選択肢へ動かし、要素を並べ替え、書き換えた列から値を作り直します。
 候補が現在のケースと置き換わるのは、プロパティがまだ失敗し、かつ列が短くなるか、同じ長さで辞書順に小さくなるときです。
+縮小器は、選択肢を選ぶ選択と、生成器が要素より先に取り出す長さも下げます。
+その結果、新しい値が古い値より少ない選択で済むことがあります。
+縮小器は古い値の後に続いていた選択をつなぎ直すので、その後の取り出しは値を保ちます。
 どの操作も進まなくなるか、縮小の時間（デフォルトで30秒）を使い切るまで、操作を繰り返します。
 
 縮小器は値ではなく選択に対して働くので、`Map` や `Bind` で組んだ値のために特別な準備は要りません。
@@ -435,9 +581,49 @@ var rareCoverProperty = func(t *pbt.T) {
 | `IntRangeToward(lo, hi, center)` | 両側から `center` |
 | `Bool` | `false` |
 | `String`、`SliceOf`、`MapOf` | 要素数を減らし、次に要素を単純にする |
-| `SampledFrom`、`OneOf`、`Frequency` | 先頭の値、または先頭の選択肢 |
+| `SampledFrom`、`OneOf`、`Frequency` | 先頭の値、または先頭の選択肢。ただし現在の選択肢より多くの選択を必要としない場合に限る |
 | `Just` | 縮小するものがない |
 | `Custom`、`Map`、`Bind` | 中で取り出す値の向きに従う |
+
+## よく縮む生成器を書く
+
+縮小器は、1回の取り出しの選択を、その中で入れ子になった取り出しの選択も含めて、ひとまとまりとして書き換えます。
+このまとまりを役立つ形に保つ書き方が2つあります。
+
+- 選択肢は、分岐全体を取り出す生成器として書き、そうした生成器のどれにするかを `OneOf` か `Frequency` で選んでください。
+  先に添字を取り出して、その値で `switch` する書き方は避けてください。
+  分岐の選択が添字のまとまりの外に出てしまい、分岐を切り替えると後に続く取り出しが乱れます。
+- 1つの `Custom` の中で、先に長さを、その後に要素を取り出してください。
+  そうすると、長さを下げたときに末尾の要素が取り除かれ、この生成器の後に続く値は保たれます。
+
+```go
+// Each alternative draws its whole value, so the choice of the alternative
+// and the choices of its value sit in one span, and the shrinker can switch
+// from the phone number to the shorter e-mail address without disturbing
+// the draws that follow.
+var contact = pbt.OneOf(
+	pbt.Custom("email", func(t *pbt.T) string {
+		return pbt.SampledFrom([]string{"alice", "bob", "carol"}).Draw(t, "") + "@example.com"
+	}),
+	pbt.Custom("phone", func(t *pbt.T) string {
+		return fmt.Sprintf("+81-%d-%04d", pbt.IntRange(10, 99).Draw(t, ""), pbt.IntRange(0, 9999).Draw(t, ""))
+	}),
+)
+
+var contactProperty = func(t *pbt.T) {
+	c := contact.Draw(t, "contact")
+	retries := pbt.IntRange(0, 10).Draw(t, "retries")
+	if retries > 3 && !strings.Contains(c, "+81-99") {
+		t.Fatalf("gave up after %d retries for %s", retries, c)
+	}
+}
+```
+
+どのシードでも、最初に失敗したケースの連絡先がどちらであっても、報告には `alice@example.com` と再試行4回が載ります。
+ある選択肢に切り替わるのは、その選択肢が現在の選択肢より多くの選択を必要としない場合に限ります。
+ここでは、メールアドレスは1つ、電話番号は2つの選択を使います。
+先頭の選択肢がほかより多くの選択を取り出すなら、そこへは届かないことがあります。
+その場合、ケースは最初に選ばれていた選択肢の中で縮みます。
 
 ## 探索を導く
 
@@ -559,6 +745,41 @@ var discountProperty = func(t *pbt.T) {
 どちらにしても、報告はその実行が見つけたバグを記述します。
 ステートフルテストは失敗をコマンドと検査の種類で区別するので、あるコマンドの事後条件の失敗が別のコマンドのパニックに変わることはありません。
 
+## 失敗が再現しないとき
+
+縮小の前に、`Check` は失敗したケースを同じ選択で1回再実行します。
+入力だけに依存するプロパティなら、同じ仕方でもう一度失敗します。
+再実行が通過したり、ケースを破棄したり、別の箇所で失敗したりすることもあります。
+その場合、プロパティか生成器が、時計、グローバル変数、ゴルーチンの順序など、選択以外の何かに依存しています。
+このとき報告には `HealthFlaky` の注記が付きます。
+
+```go
+// The cache keeps a hit counter across cases, so the outcome of a case
+// depends on the cases that ran before it.
+var hits atomic.Int64
+
+var flakyProperty = func(t *pbt.T) {
+	key := pbt.IntRange(0, 9).Draw(t, "key")
+	if hits.Add(1)%7 == 0 && key > 2 {
+		t.Fatalf("cache miss for key %d", key)
+	}
+}
+```
+
+```text
+[pbt] property failed after 55 passed checks and 3 shrink steps (size 42)
+[pbt] key (IntRange(0, 9)) = 4
+[pbt] error: cache miss for key 4
+[pbt] reproduce: go test -run 'TestCache' -pbt.seed=0x1
+[pbt] health: HealthFlaky: the failure did not recur when its input was replayed (the replay passed); the original failure was at flaky_test.go:21 (IgnoreHealth(HealthFlaky) hides it)
+```
+
+それでも `Check` はケースを縮小して保存します。
+6章の競合のように、ときどきしか再現しない失敗も失敗だからです。
+注記は、縮小したケースを再実行しても失敗しないかもしれないことを知らせます。
+報告を信頼する前に、プロパティを直してください。
+競合を捕まえた6章の並行テストにはこの注記が付くことがあり、そこでは想定どおりの結果です。
+
 ## 縮小がしないこと
 
 縮小器が到達するのは局所的な最小で、常に全体の最小とは限りません。
@@ -566,6 +787,8 @@ var discountProperty = func(t *pbt.T) {
 値の構造が単純な形を隠している場面のために、`LetShrink` と `ShrinkTo` があります。
 ケースが縮小している間、サイズパラメーターは固定されます。
 時間の上限は失敗1件あたり30秒で、`ShrinkTime` か `-pbt.shrinktime` で変えられます。
+縮小は、この時間の上限か、固定された200,000ステップの上限で止まることがあります。
+その場合、もっと小さなケースが存在するかもしれないので、報告に `HealthShrink` の注記が付きます。
 
 ---
 
@@ -576,8 +799,9 @@ var discountProperty = func(t *pbt.T) {
 
 ## オプションとフラグ
 
-すべての設定に、`go test` の実行全体に有効なフラグと、1回の `Check` に有効なオプションがあります。
+ほとんどの設定に、`go test` の実行全体に有効なフラグと、1回の `Check` に有効なオプションがあります。
 オプションがフラグより優先されます。
+ただしヘルスチェックは例外で、フラグとオプションの指定が足し合わされます。
 
 | フラグ | オプション | デフォルト | 意味 |
 | --- | --- | --- | --- |
@@ -585,6 +809,7 @@ var discountProperty = func(t *pbt.T) {
 | `-pbt.seed` | `Seed(s)` | ランダム | 実行のシード。すべての報告に表示 |
 | `-pbt.startsize`、`-pbt.maxsize` | `Sizes(start, max)` | 1、42 | 最初のケースのサイズと、増加の上限 |
 | `-pbt.shrinktime` | `ShrinkTime(d)` | 30s | 失敗1件の縮小に使う時間 |
+| `-pbt.failures` | `MaxFailures(n)` | 1 | 集めて縮小し報告する、種類の異なる失敗の数 |
 | `-pbt.searchsteps` | `SearchSteps(n)` | 1000 | 標的型探索のケース数 |
 | `-pbt.nosave` | `NoSave()` | false | 失敗したケースを保存しない |
 | `-pbt.replay` | `ReplayFile(path)` | なし | 探索の前に再実行する保存済みケース |
@@ -593,6 +818,8 @@ var discountProperty = func(t *pbt.T) {
 | | `NoReplay()` | false | 保存済みケースを再実行しない |
 | | `Setup(f)` | なし | 各ケースの前に `f` を実行 |
 | | `CheckCoverage()` | false | 不足か未決の `Cover` 要求で失敗 |
+| `-pbt.checkhealth` | `CheckHealth(checks...)` | なし | 通過した実行を失敗にするヘルスチェック（2章） |
+| `-pbt.ignorehealth` | `IgnoreHealth(checks...)` | なし | 隠すヘルスチェック |
 | | `ReportLimit(chars)`、`ReportDepth(levels)` | 2000、3 | 報告する値の文字数と、入れ子の値の深さ |
 
 ```go
@@ -788,12 +1015,56 @@ func TestPanics(t *testing.T) {
 `Make` は9章で説明します。
 `WithType` と `WithField` のオプションで引数を絞れます。
 
+## 1回の実行での複数の失敗
+
+実行は通常、最初の失敗で止まり、それを縮小して報告します。
+そのため、バグが2つある関数では、バグが1つずつしか見えません。
+1つ目を直して再び実行して、ようやく2つ目に出会います。
+`MaxFailures(n)` か `-pbt.failures=n` を指定すると、失敗の後も実行を続けます。
+仕方の異なる失敗を最大 `n` 件集め、それぞれを縮小し、保存し、報告します。
+
+```go
+var portProperty = func(t *pbt.T) {
+	s := pbt.StringOf(pbt.SampledFrom([]rune("0123456789"))).Draw(t, "s")
+	n, ok := parsePort(s)
+	if ok && !validPort(s) {
+		t.Fatalf("parsePort(%q) accepted %d", s, n)
+	}
+	if !ok && validPort(s) {
+		t.Fatalf("parsePort(%q) rejected a valid port", s)
+	}
+}
+```
+
+```text
+[pbt] failure 1 of 2: property failed after 6 passed checks and 9 shrink steps (size 4)
+[pbt] s (StringOf(SampledFrom(10 values))) = "0"
+[pbt] error: parsePort("0") accepted 0
+[pbt] reproduce: go test -run 'TestPort' -pbt.seed=0x1 -pbt.failures=2
+[pbt] failure 2 of 2: property failed after 6 passed checks and 90 shrink steps (size 8)
+[pbt] s (StringOf(SampledFrom(10 values))) = "7000"
+[pbt] error: parsePort("7000") rejected a valid port
+[pbt] reproduce: go test -run 'TestPort' -pbt.seed=0x1 -pbt.failures=2
+```
+
+失敗した行が違うか、パニックの型か発生位置が違うとき、2つの失敗は異なるものとみなされます。
+この区別は、3章で縮小を1つのバグにとどめていたものと同じです。
+縮小器が途中で新しい仕方の失敗に出会えば、それも `n` 件のうちの1件になります。
+どの失敗にも、`ShrinkTime` の時間がそれぞれ丸ごと割り当てられます。
+2つ目の最小値7000は局所的な最小です。
+本当の境界は6554ですが、そこへ至るには後ろの桁をより大きな数字にする必要があり、縮小器はそれを試しません。
+保存した失敗はまとめて再実行され、保存済みのケースが再実行で失敗したときは、それ以上の失敗を探しません。
+`CheckExists` はこのオプションを無視します。
+
 ## シード、保存したケース、再実行
 
 すべての報告は、実行のシードを含む `reproduce:` の行で終わります。
 そのシードを `-pbt.seed` に渡すと、プロパティのコードとpbtのバージョンが同じであれば、失敗したケースを含む同じケースの列が繰り返されます。
 pbtを更新すると、同じシードから生成されるケースが変わることがあります。
-v0.3.2では整数生成の修正により一部のシードで生成結果が変わりますが、既存の保存済み選択列は従来どおり再生されます。
+v0.3.2では整数生成の修正により、一部のシードで生成結果が変わります。
+v0.4.0では、一部の再帰的な型について `Make` が生成する値が変わり、縮小器が別の、より小さなケースに到達することがあります。
+保存済みのケースは、その選択の列を、インストールされているバージョンの生成器に通して再生します。
+pbtを更新した後は、再帰的な型に `Make` を使うプロパティの保存済みケースが、別の値を作ることがあります。
 
 失敗したケースは `testdata/pbt/<テスト名>/<ハッシュ>` にもテキストファイルとして保存されます。
 サイズ、コメントとして取り出した値、そして選択の列が入っています。
@@ -978,7 +1249,7 @@ func (q *leakyQueue) Close(id int) error {
 報告には、プログラム、実行の履歴、失敗したステップの前のモデル状態が載ります。
 
 ```text
-[pbt] property failed after 5 passed checks and 65 shrink steps (size 6)
+[pbt] property failed after 5 passed checks and 81 shrink steps (size 6)
 [pbt] cmds (Commands) = Program{
 [pbt]     var1 = issue()
 [pbt]     var2 = close(var1)
@@ -1254,7 +1525,7 @@ pbtはそれまでで最良のケースの選択を変異させ、効用が高�
 探索は、チェック数ではなく `SearchSteps` か `-pbt.searchsteps` で決めたステップ数（デフォルトは1000）だけ続きます。
 
 ```text
-[pbt] property failed after 246 passed checks and 1835 shrink steps (size 33)
+[pbt] property failed after 246 passed checks and 2039 shrink steps (size 33)
 [pbt] utility position = 51
 [pbt] steps (SliceOf(SampledFrom(2 values))) = []int{1, 1, 1, 1, …}
 [pbt] error: the walk reached 51
@@ -1263,12 +1534,72 @@ pbtはそれまでで最良のケースの選択を変異させ、効用が高�
 探索は246ケースで50を超える歩みを見つけ、縮小器がそれを右への51歩、つまり失敗する最小の入力まで減らしました。
 プロパティが通過したときは、要約に観測した最良の効用が載ります。
 `t.Minimize` は逆向きに探索します。
-1つのケースの効用は1つです。
-同じ名前で `Maximize` を再び呼ぶと値が置き換わり、別の名前で呼ぶとエラーになります。
+同じ名前で `Maximize` を再び呼ぶと、そのケースの値が置き換わります。
 
 「近さ」の概念があるプロパティで探索を使ってください。
 木の深さ、キューの長さ、再試行の回数、境界までの距離などです。
 大半の入力で平らな効用は、探索に登る手がかりを与えません。
+
+## 複数の目的
+
+1つのケースは、名前の異なる複数の効用を報告できます。
+このとき探索は効用の名前ごとに目的を分け、目的ごとに現在のケースと最良のケースを持ちます。
+目的は交代で探索されます。
+各ステップは、目的が最初に現れた順に、1つの目的の現在のケースを変異させます。
+変異を残すかどうかは、その目的の効用だけで判断します。
+
+```go
+// simulate runs jobs of the given durations on a pool of workers and
+// returns the longest queue and the longest wait.
+func simulate(jobs []int, workers int) (longestQueue, longestWait int) {
+	free := make([]int, workers) // the time at which each worker is free
+	for i, d := range jobs {
+		w := 0
+		for k := range free {
+			if free[k] < free[w] {
+				w = k
+			}
+		}
+		start := max(free[w], i) // job i arrives at time i
+		longestWait = max(longestWait, start-i)
+		waiting := 0
+		for _, f := range free {
+			if f > i {
+				waiting++
+			}
+		}
+		longestQueue = max(longestQueue, waiting)
+		free[w] = start + d
+	}
+	return longestQueue, longestWait
+}
+
+var poolProperty = func(t *pbt.T) {
+	jobs := pbt.SliceOf(pbt.IntRange(1, 10)).Draw(t, "jobs")
+	workers := pbt.IntRange(1, 4).Draw(t, "workers")
+	queue, wait := simulate(jobs, workers)
+	t.Maximize("queue", float64(queue))
+	t.Maximize("wait", float64(wait))
+	if wait > 100 {
+		t.Fatalf("a job waited %d", wait)
+	}
+}
+```
+
+```text
+[pbt] property failed after 41 passed checks and 3005 shrink steps (size 26)
+[pbt] utility queue = 1
+[pbt] utility wait = 101
+[pbt] jobs (SliceOf(IntRange(1, 10))) = []int{3, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 1}
+[pbt] workers (IntRange(1, 4)) = 1
+[pbt] error: a job waited 101
+[pbt] reproduce: go test -run 'TestPool' -pbt.seed=0x1
+```
+
+報告には、失敗したケースのすべての効用が載ります。
+通過した実行では、要約に各目的の最良の値が載ります。
+目的どうしで探索のステップを分け合うので、目的が複数ある実行には `SearchSteps` で多めのステップを与えてください。
+目的が1つのプロパティは、以前とまったく同じように探索します。
 
 ## 存在性
 
@@ -1279,7 +1610,8 @@ pbtはその証拠を縮小してログに出します。
 
 ```go
 // CheckExists succeeds once a case passes: here, a Pythagorean triple. The
-// witness is shrunk and logged.
+// witness is shrunk and logged. The seed keeps the run reproducible: a few
+// seeds need more than 5000 cases to meet a triple.
 func TestATripleExists(t *testing.T) {
 	pbt.CheckExists(t, func(t *pbt.T) {
 		a := pbt.IntRange(1, 50).Draw(t, "a")
@@ -1288,12 +1620,12 @@ func TestATripleExists(t *testing.T) {
 		if a*a+b*b != c*c {
 			t.Fail()
 		}
-	}, pbt.Checks(5000))
+	}, pbt.Checks(5000), pbt.Seed(1))
 }
 ```
 
 ```text
-[pbt] witness found after 2748 rejected cases and 14 shrink steps (seed 0x83d3334683123f8d) (size 42)
+[pbt] witness found after 98 rejected cases and 29 shrink steps (seed 0x1) (size 42)
 [pbt] a (IntRange(1, 50)) = 3
 [pbt] b (IntRange(1, 50)) = 4
 [pbt] c (IntRange(1, 70)) = 5
@@ -1317,24 +1649,22 @@ pbtは2つの方法で型から生成器を導きます。
 
 ```go
 type Order struct {
-	ID       int      `pbt:"min=1"`
-	Items    []string `pbt:"min=1,max=5"`
-	Note     string   `pbt:"-"` // stays zero
-	Placed   time.Time
-	internal int // unexported fields stay zero
+	ID       int        `pbt:"min=1"`
+	Items    []string   `pbt:"min=1,max=5"`
+	Note     string     `pbt:"-"` // stays zero
+	Placed   time.Time  `pbt:"min=2026-01-01T00:00:00Z,max=2026-12-31T23:59:59Z"`
+	Client   netip.Addr // generated with pbt.Addr
+	internal int        // unexported fields stay zero
 }
 
 var orderGen = pbt.Make[Order](
-	pbt.WithType(pbt.Map(pbt.IntRange(0, 364), func(d int) time.Time {
-		return time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC).AddDate(0, 0, d)
-	})),
 	pbt.WithField[Order]("Items", pbt.SliceOfN(pbt.StringN(1, 8), 1, 5)),
 )
 
 func TestOrders(t *testing.T) {
 	pbt.Check(t, func(t *pbt.T) {
 		o := orderGen.Draw(t, "order")
-		if o.ID < 1 || len(o.Items) == 0 || o.Note != "" || o.Placed.Year() != 2026 {
+		if o.ID < 1 || len(o.Items) == 0 || o.Note != "" || o.Placed.Year() != 2026 || !o.Client.IsValid() {
 			t.Fatalf("unexpected order %+v", o)
 		}
 	})
@@ -1345,10 +1675,23 @@ func TestOrders(t *testing.T) {
 `pbt` 構造体タグでフィールドを調整できます。
 `min` と `max` は数値か、文字列、スライス、マップの長さを制限し、`-` はフィールドをゼロ値のままにします。
 生成器を差し替えるオプションが2つあります。
-`WithType(g)` はある型のすべての値に効き、上の例で `time.Time` に生成器を与えているのがこれです。
-`WithField[S](name, g)` は構造体の1つのフィールドに効きます。
+`WithType(g)` はある型のすべての値に効き、`WithField[S](name, g)` は構造体の1つのフィールドに効きます。
+上の例では、`Items` の空でない文字列を `WithField` で与えています。
 
-助けが要る型もあります。
+`Make` は、状態が非公開になっている標準ライブラリの型を知っていて、それらには1章の生成器を使います。
+
+| 型 | 生成器 |
+| --- | --- |
+| `time.Time` | `Time`。`min` と `max` があれば `TimeRange` |
+| `*time.Location` | `FixedZone` |
+| `netip.Addr`、`netip.Prefix`、`netip.AddrPort` | `Addr`、`Prefix`、`AddrPort` |
+| `net.IP` | `Addr` のアドレス。4バイトと16バイトの両方の形 |
+| `net.HardwareAddr` | `HardwareAddr` |
+
+`time.Time` のフィールドは、上の `Placed` のように、`min` と `max` をRFC 3339のタイムスタンプで受け取ります。
+`time.Duration` は整数型のままで、ほかの `int64` と同じように生成されます。
+
+これら以外にも、助けが要る型があります。
 リフレクションは非公開フィールドに値を設定できないので、非公開フィールドはゼロ値のままです。
 状態がすべて非公開の型には `WithType` が要ります。
 インターフェース、チャネル、関数には導出できる生成器がないので、同じく `WithType` か `WithField` が要ります。
@@ -1401,7 +1744,51 @@ func TestExprSize(t *testing.T) {
 `Bounded(leaf, node)` は下位の形です。
 値1つにつき1つの再帰予算を持ち、その値を組み上げる間に取り出すすべての制限付き生成器がその予算を共有します。
 相互に再帰する2つの型に必要な仕組みです。
-`Make` は再帰的な構造体に同じ予算を適用するので、自己参照する構造体が際限なく育つことはありません。
+
+`Make` は、かわりに値全体の大きさを制限します。
+1つの値には、`8*max(size, 1)` 単位の成長の割り当てがあります。
+コレクションの要素、文字列のルーン、`Make` が試みるマップのエントリ、nilでないポインタは、どれだけ深い位置にあっても1つにつき1単位を消費します。
+割り当てを使い切ると、コレクションはそれ以上伸びず、再帰的な参照はnilか空のままになります。
+そのため、1つの値を作る仕事量はサイズに対して線形に増えます。
+固定のフィールド、配列、タグの最小長は、割り当てを使い切った後も満たします。
+ただし、最小長を満たそうとすると際限なく再帰する場合は除きます。
+
+```go
+// A directory holds files and directories. Make shares one allowance of
+// growth across the whole value, so a tree stays proportional to the size
+// parameter however the fields nest.
+type Dir struct {
+	Name  string
+	Files []string
+	Dirs  []Dir
+}
+
+func countNodes(d Dir) int {
+	n := 1 + len(d.Files) + len([]rune(d.Name))
+	for _, s := range d.Files {
+		n += len([]rune(s))
+	}
+	for _, c := range d.Dirs {
+		n += countNodes(c)
+	}
+	return n
+}
+
+func TestDirectoryTrees(t *testing.T) {
+	pbt.Check(t, func(t *pbt.T) {
+		d := pbt.Make[Dir]().Draw(t, "dir")
+		if n := countNodes(d); n > 8*max(t.Size(), 1)+1 {
+			t.Fatalf("%d elements at size %d", n, t.Size())
+		}
+	})
+}
+```
+
+`BoundedGrowth(g)` は、手書きの生成器に同じ割り当てを与えます。
+`g` の中で取り出すコレクションとポインタが、その割り当てを共有します。
+`UnboundedGrowth(g)` は、一部を外側の割り当てから外します。
+明示的に差し替えた生成器が、自分の長さの規則を優先させるときに必要な仕組みです。
+`Make` は `WithType` と `WithField` にこれを使います。
 
 ## pbtgen
 
@@ -1416,7 +1803,9 @@ func TestExprSize(t *testing.T) {
 `Make` の構造体タグはそのまま効きます。
 `gen=EXPR` タグは、フィールドの生成器として使うGoの式を指定します。
 同じパッケージにある `pbt.Gen[string]` 型の変数などです。
-再帰的な型は、相互再帰を含めて `Bounded` を通して生成されます。
+生成されるコードは、標準ライブラリの型に `Make` と同じ生成器を使い、`BoundedGrowth` を通して `Make` と同じ割り当てを使います。
+そのため、非公開フィールドを持たない型は、相互に再帰する型も含めて、同じシードから `Make` とpbtgenで同じ値を得ます。
+非公開フィールドを持つ型では、pbtgenがそのフィールドにも値を設定する分、`Make` より多くを生成します。
 
 出力を調整するフラグが3つあります。
 `-output` はファイル名を指定します。
@@ -1426,6 +1815,154 @@ pbtgenは現在のプラットフォームで `go build` がコンパイルす�
 
 型が頻繁に変わるときや、生成器が1つのテストにだけ要るときは `Make` を選んでください。
 生成器がパッケージのテスト支援の一部であるとき、非公開フィールドが重要なとき、テスト時のパニックよりコンパイルエラーのほうが望ましいときは、pbtgenを選んでください。
+
+---
+
+# 規格が定める形式
+
+プログラムの入力の多くは、規格が定める形式の文字列です。
+タイムスタンプ、メールアドレス、URI、JSON、UUID、言語タグなどです。
+パッケージ `go.ymotongpoo.com/pbt/format` はそれらを生成します。
+どの生成器も `pbt.Gen[string]` を返し、規格の文法から値を組みます。
+縮小器が試す値を含め、どの値も有効です。
+
+```go
+import "go.ymotongpoo.com/pbt/format"
+```
+
+1章の生成器は、`time.Time` や `netip.Addr` のようなGoの型を返します。
+このパッケージの生成器はテキストを返します。
+`pbt.IPv6()` はアドレスを返し、`format.RFC4291IPv6()` はアドレスのさまざまな書き方を返します。
+
+## 2つの問いと2つの名前
+
+形式には2つの問いがあります。
+1つは、プログラムが何を書き出すべきかです。
+もう1つは、パーサーが何を受理しなければならないかです。
+答えは異なり、パッケージはそれぞれの答えに別の名前を付けています。
+
+- `Email`、`URL`、`HTTPDate` のように規格の名前を含まない関数は、一般的な形か正規形を生成します。
+  その形式を書き出すコードや保存するコードへの入力と、どのバリデーターも通るべき値に使ってください。
+- `RFC5321Mailbox`、`RFC3986URI`、`RFC9110HTTPDate` のように規格の名前を冠した関数は、規格の生成規則にある選択肢を生成します。
+  パーサーのテストに使ってください。
+  省くのは、RFC 5322の廃止された構文のように、規格が生成を禁じている部分だけです。
+  どの部分を省いたかと、上限のない長さに設けた上限は、各関数のドキュメントに書いてあります。
+
+`Time(layout)` はパッケージ `time` のレイアウト定数を受け取ります。
+`format.Time(time.RFC1123)` は、そのレイアウトで `time.Time.Format` が書き出す文字列を生成します。
+つまり `Time` はGoが書き出す形の名前で、`RFC3339` はRFC 3339が許す形の名前です。
+
+| 分野 | プログラムが書き出すもの | パーサーが受理しなければならないもの |
+| --- | --- | --- |
+| タイムスタンプ | `Time(time.RFC3339)`、`HTTPDate` | `RFC3339`、`RFC3339FullDate`、`RFC3339FullTime`、`RFC9110HTTPDate`、`RFC5322DateTime` |
+| 期間 | `ISO8601Duration` | `RFC3339Duration` |
+| アドレス | `IPv4`、`RFC5952IPv6`、`CIDR`、`MAC` | `RFC4291IPv6` |
+| ホスト名 | `Hostname`、`IDNAHostname`、`UnicodeHostname` | `RFC1035Domain` |
+| メール | `Email`、`HTMLEmail`、`SMTPUTF8Mailbox` | `RFC5321Mailbox`、`RFC5322AddrSpec` |
+| URI | `URL` | `RFC3986URI`、`RFC3986Reference` |
+| HTTP | `HTTPToken`、`HTTPFieldName`、`HTTPFieldValue`、`MediaType` | `RFC9110FieldValue`、`RFC9110MediaType`、`RFC6265Cookie`、`RFC6265SetCookie` |
+| データ | `JSON`、`IJSON`、`JSONPointer`、`JSONPointerFragment`、`UUID`、`SemVer`、`LanguageTag` | `RFC4180CSV`、`RFC5646LanguageTag` |
+| エンコーディング | `Base64`、`Base64URL`、`Base32`、`Base32Hex`、`Base16`、`Hex` と、パディングなしの `Raw` 版 | |
+| 番号 | `PhoneNumber`、`PaymentCard`、`ISBN13`、`ISBN10` | |
+
+## パーサーをテストする
+
+規格のあらゆる形をパーサーに与えるプロパティは、パーサーが規格から外れる箇所を見つけます。
+RFC 3339のタイムスタンプは、どれも同じ名前のレイアウトで解析できるはずです。
+
+```go
+// Every timestamp of RFC 3339 should parse with the RFC3339 layout of
+// package time.
+var rfc3339Property = func(t *pbt.T) {
+	s := format.RFC3339().Draw(t, "")
+	if _, err := time.Parse(time.RFC3339, s); err != nil {
+		t.Fatalf("time.Parse rejects %s: %v", s, err)
+	}
+}
+```
+
+```text
+[pbt] property failed after 1 passed checks and 19 shrink steps (size 2)
+[pbt] s (RFC3339()) = "1970-01-01T00:00:00z"
+[pbt] error: time.Parse rejects 1970-01-01T00:00:00z: parsing time "1970-01-01T00:00:00z" as "2006-01-02T15:04:05Z07:00": cannot parse "z" as "Z07:00"
+[pbt] reproduce: go test -run 'TestRFC3339' -pbt.seed=0x1
+```
+
+RFC 3339は小文字の `z` と `t` を許しますが、`time.Parse` はそれらを受理しません。
+閏秒の `23:59:60` も同じく受理しません。
+それが問題になるかどうかは、タイムスタンプの出どころによります。
+このプロパティで判断すべき点が明らかになり、縮小したケースはその違いを1文字で示します。
+各生成器のドキュメントには、Go 1.26で確かめた、規格とGoの標準ライブラリのパーサーとの違いが載っています。
+パッケージのテストが、それらの違いを検査しています。
+
+## プログラムが書き出すものをテストする
+
+プログラムへの入力には、規格の名前を含まない関数を使います。
+その値は、一般的な受け手ならどれでも受理します。
+登録フォームは `format.Email()` の値を保存し、`net/mail` が同じアドレスを読み戻すことを期待できます。
+
+```go
+// A sign-up form stores the address it receives, and the confirmation mail
+// must reach the same mailbox.
+func TestSignupAddresses(t *testing.T) {
+	pbt.Check(t, func(t *pbt.T) {
+		email := format.Email().Draw(t, "email")
+		addr, err := mail.ParseAddress(email)
+		if err != nil || addr.Address != email {
+			t.Fatalf("mail.ParseAddress(%q) = %v, %v", email, addr, err)
+		}
+	})
+}
+```
+
+これらの生成器も1章の生成器と同じく、コードが誤動作しやすいケースに寄ります。
+一部のケースでは、次のような値を作ります。
+
+- `Email` はちょうど64文字のローカル部を、`Hostname` はちょうど253文字の名前を作ります。
+- `RFC3339` は閏秒とオフセット `-00:00` を書き出します。
+- `JSON` は64ビットをはるかに超える数と、対になっていないサロゲートのエスケープを書き出します。
+
+その頻度は各生成器のドキュメントにあります。
+
+```go
+func TestDecoders(t *testing.T) {
+	pbt.Check(t, func(t *pbt.T) {
+		doc := format.JSON().Draw(t, "doc")
+		if !json.Valid([]byte(doc)) {
+			t.Fatalf("json.Valid rejects %s", doc)
+		}
+		link := format.URL().Draw(t, "link")
+		u, err := url.Parse(link)
+		if err != nil || u.Host == "" {
+			t.Fatalf("url.Parse(%q) = %v, %v", link, u, err)
+		}
+		at := format.Time(time.RFC1123Z).Draw(t, "at")
+		if _, err := time.Parse(time.RFC1123Z, at); err != nil {
+			t.Fatal(err)
+		}
+	})
+}
+```
+
+## 値の縮み方
+
+値は短い有効な文字列へ縮みます。
+`Email` なら `a@a.aa`、`URL` なら `http://a`、`RFC3339` なら `1970-01-01T00:00:00Z`、`JSON` なら `null` です。
+縮小器は選択の少ないほうを選ぶので、値の一部が、最初に選ばれていた選択肢の中で縮むこともあります。
+例えば、引用符で囲んだローカル部は、空の引用文字列 `""@a` へ縮みます。
+各生成器のドキュメントには、選択肢ごとの縮小先が載っています。
+
+## パッケージが扱わないもの
+
+このパッケージが生成するのは構文で、登録された値ではありません。
+
+- 言語タグは整形式ですが、サブタグはIANAのレジストリと照合していません。
+- カード番号はチェックディジットが正しいものの、どの発行者が割り当てた番号でもありません。
+- ISBNにはハイフンを入れません。
+  ハイフンの位置は、ISBN機関が公開する範囲で決まるからです。
+
+ISO 3166の国コードやISO 4217の通貨のように、レジストリに従う表はレジストリとともに変わるので、このパッケージには含めていません。
+プログラムが対応する値を並べ、`SampledFrom` で書いてください。
 
 ---
 
@@ -1495,7 +2032,8 @@ pbtは列全体をモデルに対して生成してから実行するためで�
 ## 参照資料
 
 - pkg.go.devの[パッケージドキュメント](https://pkg.go.dev/go.ymotongpoo.com/pbt)は、すべての関数とオプションを、実行できる例とともに説明しています。
-- [DESIGN.md](https://github.com/ymotongpoo/pbt/blob/main/DESIGN.md) は設計の判断と、PropEr、QuickCheck、Hypothesis、rapidとの比較を記録しています。日本語版はDESIGN.ja.mdです。
+- [パッケージformatのドキュメント](https://pkg.go.dev/go.ymotongpoo.com/pbt/format)は、すべての形式について、規格のどの部分を扱うかと縮小先を説明しています。
+- [DESIGN.md](https://github.com/ymotongpoo/pbt/blob/main/DESIGN.md) は設計の判断と、PropEr、QuickCheck、Hypothesis、rapid、Hegelとの比較を記録しています。日本語版はDESIGN.ja.mdです。
 - [CHANGELOG.md](https://github.com/ymotongpoo/pbt/blob/main/CHANGELOG.md) は各リリースの変更を列挙しています。v1.0まではAPIが変わることがあります。
 - 不具合の報告と質問は[GitHubリポジトリ](https://github.com/ymotongpoo/pbt)へお願いします。
 
@@ -1507,6 +2045,9 @@ go test ./... -pbt.seed=0x1c3           # 実行を繰り返す
 go test ./... -pbt.startsize=10 -pbt.maxsize=100
 go test ./... -pbt.shrinktime=2m
 go test ./... -pbt.searchsteps=5000     # 標的型探索を長くする
+go test ./... -pbt.failures=3           # 種類の異なる失敗を3件まで集める
+go test ./... -pbt.checkhealth=default  # 無駄な入力や大きすぎる入力で失敗にする
+go test ./... -pbt.ignorehealth=slow    # 時間の警告を隠す
 go test ./... -pbt.nosave               # testdata/pbt に書き込まない
 go test ./... -pbt.replay=testdata/pbt/TestQueue/3f2a… -run TestQueue
 go test ./... -pbt.v                    # 要約と縮小のステップを表示する

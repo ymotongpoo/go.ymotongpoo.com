@@ -31,7 +31,7 @@ pbtはそれまでで最良のケースの選択を変異させ、効用が高�
 探索は、チェック数ではなく `SearchSteps` か `-pbt.searchsteps` で決めたステップ数（デフォルトは1000）だけ続きます。
 
 ```text
-[pbt] property failed after 246 passed checks and 1835 shrink steps (size 33)
+[pbt] property failed after 246 passed checks and 2039 shrink steps (size 33)
 [pbt] utility position = 51
 [pbt] steps (SliceOf(SampledFrom(2 values))) = []int{1, 1, 1, 1, …}
 [pbt] error: the walk reached 51
@@ -40,12 +40,72 @@ pbtはそれまでで最良のケースの選択を変異させ、効用が高�
 探索は246ケースで50を超える歩みを見つけ、縮小器がそれを右への51歩、つまり失敗する最小の入力まで減らしました。
 プロパティが通過したときは、要約に観測した最良の効用が載ります。
 `t.Minimize` は逆向きに探索します。
-1つのケースの効用は1つです。
-同じ名前で `Maximize` を再び呼ぶと値が置き換わり、別の名前で呼ぶとエラーになります。
+同じ名前で `Maximize` を再び呼ぶと、そのケースの値が置き換わります。
 
 「近さ」の概念があるプロパティで探索を使ってください。
 木の深さ、キューの長さ、再試行の回数、境界までの距離などです。
 大半の入力で平らな効用は、探索に登る手がかりを与えません。
+
+## 複数の目的
+
+1つのケースは、名前の異なる複数の効用を報告できます。
+このとき探索は効用の名前ごとに目的を分け、目的ごとに現在のケースと最良のケースを持ちます。
+目的は交代で探索されます。
+各ステップは、目的が最初に現れた順に、1つの目的の現在のケースを変異させます。
+変異を残すかどうかは、その目的の効用だけで判断します。
+
+```go
+// simulate runs jobs of the given durations on a pool of workers and
+// returns the longest queue and the longest wait.
+func simulate(jobs []int, workers int) (longestQueue, longestWait int) {
+	free := make([]int, workers) // the time at which each worker is free
+	for i, d := range jobs {
+		w := 0
+		for k := range free {
+			if free[k] < free[w] {
+				w = k
+			}
+		}
+		start := max(free[w], i) // job i arrives at time i
+		longestWait = max(longestWait, start-i)
+		waiting := 0
+		for _, f := range free {
+			if f > i {
+				waiting++
+			}
+		}
+		longestQueue = max(longestQueue, waiting)
+		free[w] = start + d
+	}
+	return longestQueue, longestWait
+}
+
+var poolProperty = func(t *pbt.T) {
+	jobs := pbt.SliceOf(pbt.IntRange(1, 10)).Draw(t, "jobs")
+	workers := pbt.IntRange(1, 4).Draw(t, "workers")
+	queue, wait := simulate(jobs, workers)
+	t.Maximize("queue", float64(queue))
+	t.Maximize("wait", float64(wait))
+	if wait > 100 {
+		t.Fatalf("a job waited %d", wait)
+	}
+}
+```
+
+```text
+[pbt] property failed after 41 passed checks and 3005 shrink steps (size 26)
+[pbt] utility queue = 1
+[pbt] utility wait = 101
+[pbt] jobs (SliceOf(IntRange(1, 10))) = []int{3, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 1}
+[pbt] workers (IntRange(1, 4)) = 1
+[pbt] error: a job waited 101
+[pbt] reproduce: go test -run 'TestPool' -pbt.seed=0x1
+```
+
+報告には、失敗したケースのすべての効用が載ります。
+通過した実行では、要約に各目的の最良の値が載ります。
+目的どうしで探索のステップを分け合うので、目的が複数ある実行には `SearchSteps` で多めのステップを与えてください。
+目的が1つのプロパティは、以前とまったく同じように探索します。
 
 ## 存在性
 
@@ -56,7 +116,8 @@ pbtはその証拠を縮小してログに出します。
 
 ```go
 // CheckExists succeeds once a case passes: here, a Pythagorean triple. The
-// witness is shrunk and logged.
+// witness is shrunk and logged. The seed keeps the run reproducible: a few
+// seeds need more than 5000 cases to meet a triple.
 func TestATripleExists(t *testing.T) {
 	pbt.CheckExists(t, func(t *pbt.T) {
 		a := pbt.IntRange(1, 50).Draw(t, "a")
@@ -65,12 +126,12 @@ func TestATripleExists(t *testing.T) {
 		if a*a+b*b != c*c {
 			t.Fail()
 		}
-	}, pbt.Checks(5000))
+	}, pbt.Checks(5000), pbt.Seed(1))
 }
 ```
 
 ```text
-[pbt] witness found after 2748 rejected cases and 14 shrink steps (seed 0x83d3334683123f8d) (size 42)
+[pbt] witness found after 98 rejected cases and 29 shrink steps (seed 0x1) (size 42)
 [pbt] a (IntRange(1, 50)) = 3
 [pbt] b (IntRange(1, 50)) = 4
 [pbt] c (IntRange(1, 70)) = 5

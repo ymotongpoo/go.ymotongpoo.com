@@ -4,7 +4,7 @@ When a case fails, pbt looks for a simpler case that fails in the same way, and 
 
 ## How a case shrinks
 
-Every value a property draws is a function of a sequence of choices, and pbt records that sequence for each case. The shrinker edits the sequence: it deletes the choices that belong to one draw, lowers numbers, moves a group of choices toward an earlier alternative, reorders elements, and then regenerates the values from the edited sequence. A candidate replaces the current case when the property still fails and the sequence is shorter, or as long and lexicographically smaller. The passes repeat until none of them makes progress or the shrink time, 30 seconds by default, runs out.
+Every value a property draws is a function of a sequence of choices, and pbt records that sequence for each case. The shrinker edits the sequence: it deletes the choices that belong to one draw, lowers numbers, moves a group of choices toward an earlier alternative, reorders elements, and then regenerates the values from the edited sequence. A candidate replaces the current case when the property still fails and the sequence is shorter, or as long and lexicographically smaller. The shrinker also lowers the choice that picks an alternative, and a length that a generator draws before its elements. The new value can then take fewer choices than the old one. The shrinker reconnects the choices that followed the old value, so the draws after it keep their values. The passes repeat until none of them makes progress or the shrink time, 30 seconds by default, runs out.
 
 Because the shrinker works on choices and not on values, nothing special is needed for a value built by `Map` or `Bind`: the shrinker edits the choices underneath and the function regenerates the value. The direction of the search follows from what each generator does with small choices.
 
@@ -14,9 +14,41 @@ Because the shrinker works on choices and not on values, nothing special is need
 | `IntRangeToward(lo, hi, center)` | `center`, from either side |
 | `Bool` | `false` |
 | `String`, `SliceOf`, `MapOf` | fewer elements, then simpler elements |
-| `SampledFrom`, `OneOf`, `Frequency` | the first value or alternative |
+| `SampledFrom`, `OneOf`, `Frequency` | the first value or alternative, when it takes no more choices than the current one |
 | `Just` | nothing to shrink |
 | `Custom`, `Map`, `Bind` | whatever the draws inside shrink toward |
+
+## Writing generators that shrink well
+
+The shrinker edits a span of choices as a unit: the choices of one draw, with the draws nested in it. Two habits keep the spans useful.
+
+- Write an alternative as a generator that draws the whole branch, and choose between such generators with `OneOf` or `Frequency`. Avoid drawing an index first and then a `switch` on it. That puts the branch's choices outside the span of the index, and switching the branch disturbs the draws that follow.
+- Draw a length first and the elements after it, inside one `Custom`. Lowering the length then removes the last elements and keeps what follows the generator.
+
+```go
+// Each alternative draws its whole value, so the choice of the alternative
+// and the choices of its value sit in one span, and the shrinker can switch
+// from the phone number to the shorter e-mail address without disturbing
+// the draws that follow.
+var contact = pbt.OneOf(
+	pbt.Custom("email", func(t *pbt.T) string {
+		return pbt.SampledFrom([]string{"alice", "bob", "carol"}).Draw(t, "") + "@example.com"
+	}),
+	pbt.Custom("phone", func(t *pbt.T) string {
+		return fmt.Sprintf("+81-%d-%04d", pbt.IntRange(10, 99).Draw(t, ""), pbt.IntRange(0, 9999).Draw(t, ""))
+	}),
+)
+
+var contactProperty = func(t *pbt.T) {
+	c := contact.Draw(t, "contact")
+	retries := pbt.IntRange(0, 10).Draw(t, "retries")
+	if retries > 3 && !strings.Contains(c, "+81-99") {
+		t.Fatalf("gave up after %d retries for %s", retries, c)
+	}
+}
+```
+
+From every seed, the report shows `alice@example.com` and 4 retries, whichever contact the failing case had at first. An alternative wins only when it takes no more choices than the current one. Here the e-mail address takes one choice and the phone number two. A first alternative that draws more than the others can stay out of reach. The case then shrinks within the alternative it started from.
 
 ## Steering the search
 
@@ -114,6 +146,33 @@ var discountProperty = func(t *pbt.T) {
 
 Suppose the first failing case is a quantity of 3000, which panics. Without the rule, the shrinker would lower the quantity past 1000, find that 101 fails the assertion, and report a wrong discount; the panic would be gone from the report. With the rule, the quantity shrinks to 1001 and the report shows the panic. When the first failure is the wrong discount, the case shrinks to 101 instead. Either way, the report describes the bug the run found. A stateful test keys its failures by command and check, so a failing postcondition of one command cannot turn into the panic of another.
 
+## When a failure does not recur
+
+Before shrinking, `Check` replays the failing case once with the same choices. A property that depends only on its input fails again, in the same way. The replay can pass, discard the case or fail at another place. Then the property or a generator depends on something besides the choices, such as a clock, a global variable or the order of goroutines. The report then carries a `HealthFlaky` note.
+
+```go
+// The cache keeps a hit counter across cases, so the outcome of a case
+// depends on the cases that ran before it.
+var hits atomic.Int64
+
+var flakyProperty = func(t *pbt.T) {
+	key := pbt.IntRange(0, 9).Draw(t, "key")
+	if hits.Add(1)%7 == 0 && key > 2 {
+		t.Fatalf("cache miss for key %d", key)
+	}
+}
+```
+
+```text
+[pbt] property failed after 55 passed checks and 3 shrink steps (size 42)
+[pbt] key (IntRange(0, 9)) = 4
+[pbt] error: cache miss for key 4
+[pbt] reproduce: go test -run 'TestCache' -pbt.seed=0x1
+[pbt] health: HealthFlaky: the failure did not recur when its input was replayed (the replay passed); the original failure was at flaky_test.go:21 (IgnoreHealth(HealthFlaky) hides it)
+```
+
+`Check` still shrinks and saves the case, since a failure that recurs only sometimes, such as a race in chapter 6, is still a failure. The note tells you that the shrunk case may not fail again when you replay it. Fix the property before you trust its reports. A parallel test of chapter 6 that catches a race can carry the note, and there it is expected.
+
 ## What shrinking will not do
 
-The shrinker reaches a local minimum, not always the global one: it only accepts candidates that are simpler by its own measure, so a smaller case that needs a larger intermediate step stays out of reach. `LetShrink` and `ShrinkTo` exist for the cases where the structure of a value hides the simpler form. The size parameter stays fixed while a case shrinks, and the time budget is 30 seconds per failure; `ShrinkTime` or `-pbt.shrinktime` change it.
+The shrinker reaches a local minimum, not always the global one: it only accepts candidates that are simpler by its own measure, so a smaller case that needs a larger intermediate step stays out of reach. `LetShrink` and `ShrinkTo` exist for the cases where the structure of a value hides the simpler form. The size parameter stays fixed while a case shrinks, and the time budget is 30 seconds per failure; `ShrinkTime` or `-pbt.shrinktime` change it. Shrinking can stop at the budget or at its fixed limit of 200,000 steps. The report then carries a `HealthShrink` note, because a smaller case may exist.

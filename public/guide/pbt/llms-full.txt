@@ -1,4 +1,4 @@
-# pbt user guide (v0.3.3)
+# pbt user guide (v0.4.0)
 
 > The user guide of pbt, a property-based testing library for Go, in one file. The index of the documentation is https://go.ymotongpoo.com/pbt/guide/llms.txt.
 
@@ -79,7 +79,7 @@ var biggestProperty = func(t *pbt.T) {
 A run of `pbt.Check(t, biggestProperty)` fails with this report.
 
 ```text
-[pbt] property failed after 12 passed checks and 16 shrink steps (size 13)
+[pbt] property failed after 12 passed checks and 20 shrink steps (size 13)
 [pbt] xs (SliceOfN(Int(), 1, -1)) = []int{-1}
 [pbt] error: biggest([-1]) = 0, want -1
 [pbt] saved to testdata/pbt/TestBiggest/5a0c…; go test replays it until the file is deleted
@@ -96,7 +96,7 @@ Read it line by line.
 
 ## What the rest of the guide covers
 
-The chapters build on each other. Chapters 1 to 4 cover generators, the size and distribution of the data, shrinking, and the options of a run. Chapters 5 to 7 cover stateful testing against a model, parallel execution and state machines. Chapter 8 covers targeted search and existential properties, chapter 9 the generators derived from types, and chapter 10 points to the examples, the migration guide for rapid users and the reference material.
+The chapters build on each other. Chapters 1 to 4 cover generators, the size and distribution of the data, shrinking, and the options of a run. Chapters 5 to 7 cover stateful testing against a model, parallel execution and state machines. Chapter 8 covers targeted search and existential properties, and chapter 9 the generators derived from types. Chapter 10 covers the strings in the formats that standards define. Chapter 11 points to the examples, the migration guide for rapid users and the reference material.
 
 ---
 
@@ -110,13 +110,81 @@ A generator is a value of type `pbt.Gen[V]`. It knows how to produce a `V` from 
 | --- | --- |
 | Integers | `Int`, `IntRange`, `IntMin`, `IntMax`, `IntRangeToward`; `Int32`, `Int64`, `Uint`, `Uint32`, `Uint64`, `Byte` and their `Range` forms; `Integer[I]` and `IntegerRange[I]` for any integer type |
 | Floats | `Float64`, `Float64Range`, `Float32`, `Float32Range` for finite values; `AnyFloat64` adds NaN and the infinities |
-| Text | `Bool`, `Rune`, `String`, `StringN`, `StringOf`, `StringOfN`, `Bytes`, `BytesN` |
+| Text | `Bool`, `Rune`, `RuneIn`, `String`, `StringN`, `StringOf`, `StringOfN`, `StringMatching`, `Bytes`, `BytesN` |
+| Time | `Time`, `TimeRange`, `Duration`, `DurationRange`, `FixedZone`, `Zone` |
+| Network | `IPv4`, `IPv6`, `Addr`, `AddrIn`, `Prefix`, `AddrPort` for `net/netip`, and `HardwareAddr` |
 | Collections | `SliceOf`, `SliceOfN`, `SliceOfDistinct`, `SliceOfNDistinct`, `MapOf`, `MapOfN`, `Permutation` |
 | Choice | `Just`, `SampledFrom`, `OneOf`, `Frequency`, `Ptr` |
 | Functions | `Func`, `Func2`, which generate pure functions for properties over callbacks |
 | Anything | `Any`, a bounded mix of common types, and `Make[T]`, which derives a generator from a type (chapter 9) |
 
-Integers lean toward the boundaries of their range and toward small values, because those are where bugs live. Lengths of strings and collections follow the size parameter of the case. A maximum length of `-1` means no bound.
+Integers lean toward the boundaries of their range and toward small values, because those are where bugs live. Lengths of strings and collections follow the size parameter of the case. A maximum length of `-1` means no bound. Strings in the formats that standards define, such as RFC 3339 timestamps, e-mail addresses and URIs, come from the package `go.ymotongpoo.com/pbt/format`, which chapter 10 describes.
+
+## Times and addresses
+
+The generators of times and addresses follow the same rule as the integers: they lean toward the values where code breaks. `Time` draws an instant between the zero `time.Time` and the end of year 9999. It moves nearly half of the instants to an edge of the calendar: the first or last nanosecond of a day, a month or a year, February 29, or a bound of the range. In a share of the cases, it also rounds the fraction of a second to whole microseconds, milliseconds or seconds, since stored timestamps mostly carry those. A date one month ahead is a classic victim.
+
+```go
+var billingProperty = func(t *pbt.T) {
+	start := pbt.Time().Draw(t, "")
+	next := nextBillingDate(start)
+	if want := (start.Month() % 12) + 1; next.Month() != want {
+		t.Fatalf("next billing date %s is not in %s", next.Format(time.DateOnly), want)
+	}
+}
+```
+
+```text
+[pbt] property failed after 39 passed checks and 13 shrink steps (size 40)
+[pbt] start (Time()) = time.Date(1970, time.January, 31, 23, 59, 59, 999999999, time.UTC)
+[pbt] error: next billing date 1970-03-03 is not in February
+[pbt] reproduce: go test -run 'TestBilling' -pbt.seed=0x1
+```
+
+`AddDate` normalizes January 31 plus one month to March 3. The run found the last nanosecond of a month. The shrinker then moved it to January 1970, the month of the Unix epoch, which is where `Time` shrinks. `TimeRange(lo, hi)` keeps values in a range and in the location of `lo`. In a location with daylight saving time, it also moves values next to a change of offset: to the moment of the change, the nanosecond before it, or the half hours around it. `Zone` loads IANA time zones, by default a list of zones with unusual rules, and `FixedZone` draws fixed offsets.
+
+The address generators return the types of `net/netip`. `IPv4` and `IPv6` draw a share of their addresses from the special-purpose blocks of RFC 6890. Among them are loopback, private networks, link local, documentation and multicast, and, for IPv6, IPv4-mapped addresses. `AddrIn` keeps addresses inside the prefixes you give it.
+
+```go
+// The client of a request is an address inside the private networks of
+// RFC 1918, and the rate limiter keys clients by their /24.
+func TestClientKey(t *testing.T) {
+	private := pbt.AddrIn(
+		netip.MustParsePrefix("10.0.0.0/8"),
+		netip.MustParsePrefix("172.16.0.0/12"),
+		netip.MustParsePrefix("192.168.0.0/16"),
+	)
+	pbt.Check(t, func(t *pbt.T) {
+		client := private.Draw(t, "client")
+		key := netip.PrefixFrom(client, 24).Masked()
+		if !key.Contains(client) || !key.Addr().IsPrivate() {
+			t.Fatalf("key %s does not cover %s", key, client)
+		}
+	})
+}
+```
+
+## Strings that match a pattern
+
+`StringMatching` builds strings from a regular expression in the syntax of package `regexp`. Every value matches the whole pattern, and shrinking keeps it matching. Alternations shrink toward earlier branches, repetitions toward their minimum count, and character classes toward their first printable ASCII member. `RuneIn` draws runes from the range tables of package `unicode`, such as scripts and categories. Every range of the tables gets the same chance, so a small script is not drowned out by the CJK ideographs.
+
+```go
+// An order number has two capital letters, a dash and four digits.
+var orderID = regexp.MustCompile(`^[A-Z]{2}-\d{4}$`)
+
+func TestOrderIDs(t *testing.T) {
+	pbt.Check(t, func(t *pbt.T) {
+		id := pbt.StringMatching(`[A-Z]{2}-\d{4}`).Draw(t, "id")
+		if !orderID.MatchString(id) {
+			t.Fatalf("%q is not an order number", id)
+		}
+		name := pbt.StringOfN(pbt.RuneIn(unicode.Hiragana, unicode.Katakana, unicode.Han), 1, 8).Draw(t, "name")
+		if label := fmt.Sprintf("%s %s", id, name); len([]rune(label)) > 16 {
+			t.Fatalf("label %q is too long", label)
+		}
+	})
+}
+```
 
 ## Building your own
 
@@ -184,7 +252,7 @@ var displayNameProperty = func(t *pbt.T) {
 ```
 
 ```text
-[pbt] property failed after 3 passed checks and 145 shrink steps (size 4)
+[pbt] property failed after 3 passed checks and 189 shrink steps (size 4)
 [pbt] user (user) = snippets.User{Name:"aaaaaaaaa", Age:0, Email:"aaaaaaaaa@example.com"}
 [pbt]   name (StringOfN(SampledFrom(26 values), 1, 12)) = "aaaaaaaaa"
 [pbt]   age (IntRange(0, 120)) = 0
@@ -193,6 +261,8 @@ var displayNameProperty = func(t *pbt.T) {
 ```
 
 The name shrank to the shortest string that still breaks the length check, nine letters of `a`, and the age to 0 because it played no part in the failure. A report lists labeled draws up to three levels deep and cuts each value at 2000 characters; the `ReportDepth` and `ReportLimit` options change both.
+
+A draw at the top level of the property appears in the report even without a label. When the draw is assigned to a single variable, as in `start := pbt.Time().Draw(t, "")` above, the report names the value after the variable. Otherwise it gives the file and the line of the draw, as in `Int() at prop_test.go:12 = 5`. The report reads the source file to find the variable. When the file is not available, for example in a binary built with `-trimpath`, the report gives the line. `Verbose()` or `-pbt.v` adds the line to every draw.
 
 ## Sampling outside a property
 
@@ -322,6 +392,38 @@ var rareCoverProperty = func(t *pbt.T) {
 
 The run stopped after 125 cases, once the interval excluded 30%. The observed share also says something about `IntRange`: 0 is a boundary value, so it occurs far more often than one case in a thousand. Statistics are how you find that out, and `Frequency` or `SampledFrom` are how you change it when a uniform spread is what the property needs.
 
+## Health checks
+
+Statistics answer the questions you ask. Health checks answer the ones you might not think of: whether the run spends its cases well. `Check` watches every run and warns about three problems with the input.
+
+| Check | Warns when |
+| --- | --- |
+| `HealthFilter` | half of the cases, and at least 20, are discarded by `Assume`, `Skip` or a `Filter` that gave up; or a `Filter` rejects nine values in ten over at least 100 |
+| `HealthLarge` | a fifth of the cases draw more than 10,000 choices |
+| `HealthSlow` | drawing the values takes 10 ms per case and a second in all, not counting the property's own work |
+
+A property that keeps only long strings shows the first one.
+
+```go
+// Most strings that String draws at small sizes are shorter than eight
+// runes, so Assume throws most cases away.
+var longNameProperty = func(t *pbt.T) {
+	name := pbt.String().Draw(t, "name")
+	t.Assume(len([]rune(name)) >= 8)
+	if short := []rune(name)[:8]; len(short) != 8 {
+		t.Fatalf("prefix %q", string(short))
+	}
+}
+```
+
+```text
+[pbt] health: HealthFilter: 629 of 729 cases were discarded; most by Assume at health_test.go:18 (629) (CheckHealth(HealthFilter) makes this fail; IgnoreHealth(HealthFilter) hides it)
+```
+
+The run passed, but it ran 729 cases to get its 100, and the warning names the line that threw the rest away. A generator that builds long strings, `StringN(8, 40)`, removes the waste. The warning names the busiest sources: the description of a `Filter`, or the line of an `Assume` or a `Skip`. `HealthLarge` names the draws that consumed the most choices.
+
+Health checks warn by default, the way `Cover` does, and the run passes. `CheckHealth()` makes `HealthFilter` and `HealthLarge` fail a passing run. `CheckHealth(HealthSlow)` adds the timing check, which is left out by default because a loaded CI machine can trip it. `IgnoreHealth(checks...)` hides a check and wins over `CheckHealth`. The flags `-pbt.checkhealth` and `-pbt.ignorehealth` take the same names for every `Check` of a `go test` run, for example `-pbt.checkhealth=default,slow`. Two more checks, `HealthFlaky` and `HealthShrink`, apply to failing runs; chapter 3 describes them.
+
 ---
 
 # Shrinking
@@ -330,7 +432,7 @@ When a case fails, pbt looks for a simpler case that fails in the same way, and 
 
 ## How a case shrinks
 
-Every value a property draws is a function of a sequence of choices, and pbt records that sequence for each case. The shrinker edits the sequence: it deletes the choices that belong to one draw, lowers numbers, moves a group of choices toward an earlier alternative, reorders elements, and then regenerates the values from the edited sequence. A candidate replaces the current case when the property still fails and the sequence is shorter, or as long and lexicographically smaller. The passes repeat until none of them makes progress or the shrink time, 30 seconds by default, runs out.
+Every value a property draws is a function of a sequence of choices, and pbt records that sequence for each case. The shrinker edits the sequence: it deletes the choices that belong to one draw, lowers numbers, moves a group of choices toward an earlier alternative, reorders elements, and then regenerates the values from the edited sequence. A candidate replaces the current case when the property still fails and the sequence is shorter, or as long and lexicographically smaller. The shrinker also lowers the choice that picks an alternative, and a length that a generator draws before its elements. The new value can then take fewer choices than the old one. The shrinker reconnects the choices that followed the old value, so the draws after it keep their values. The passes repeat until none of them makes progress or the shrink time, 30 seconds by default, runs out.
 
 Because the shrinker works on choices and not on values, nothing special is needed for a value built by `Map` or `Bind`: the shrinker edits the choices underneath and the function regenerates the value. The direction of the search follows from what each generator does with small choices.
 
@@ -340,9 +442,41 @@ Because the shrinker works on choices and not on values, nothing special is need
 | `IntRangeToward(lo, hi, center)` | `center`, from either side |
 | `Bool` | `false` |
 | `String`, `SliceOf`, `MapOf` | fewer elements, then simpler elements |
-| `SampledFrom`, `OneOf`, `Frequency` | the first value or alternative |
+| `SampledFrom`, `OneOf`, `Frequency` | the first value or alternative, when it takes no more choices than the current one |
 | `Just` | nothing to shrink |
 | `Custom`, `Map`, `Bind` | whatever the draws inside shrink toward |
+
+## Writing generators that shrink well
+
+The shrinker edits a span of choices as a unit: the choices of one draw, with the draws nested in it. Two habits keep the spans useful.
+
+- Write an alternative as a generator that draws the whole branch, and choose between such generators with `OneOf` or `Frequency`. Avoid drawing an index first and then a `switch` on it. That puts the branch's choices outside the span of the index, and switching the branch disturbs the draws that follow.
+- Draw a length first and the elements after it, inside one `Custom`. Lowering the length then removes the last elements and keeps what follows the generator.
+
+```go
+// Each alternative draws its whole value, so the choice of the alternative
+// and the choices of its value sit in one span, and the shrinker can switch
+// from the phone number to the shorter e-mail address without disturbing
+// the draws that follow.
+var contact = pbt.OneOf(
+	pbt.Custom("email", func(t *pbt.T) string {
+		return pbt.SampledFrom([]string{"alice", "bob", "carol"}).Draw(t, "") + "@example.com"
+	}),
+	pbt.Custom("phone", func(t *pbt.T) string {
+		return fmt.Sprintf("+81-%d-%04d", pbt.IntRange(10, 99).Draw(t, ""), pbt.IntRange(0, 9999).Draw(t, ""))
+	}),
+)
+
+var contactProperty = func(t *pbt.T) {
+	c := contact.Draw(t, "contact")
+	retries := pbt.IntRange(0, 10).Draw(t, "retries")
+	if retries > 3 && !strings.Contains(c, "+81-99") {
+		t.Fatalf("gave up after %d retries for %s", retries, c)
+	}
+}
+```
+
+From every seed, the report shows `alice@example.com` and 4 retries, whichever contact the failing case had at first. An alternative wins only when it takes no more choices than the current one. Here the e-mail address takes one choice and the phone number two. A first alternative that draws more than the others can stay out of reach. The case then shrinks within the alternative it started from.
 
 ## Steering the search
 
@@ -440,9 +574,36 @@ var discountProperty = func(t *pbt.T) {
 
 Suppose the first failing case is a quantity of 3000, which panics. Without the rule, the shrinker would lower the quantity past 1000, find that 101 fails the assertion, and report a wrong discount; the panic would be gone from the report. With the rule, the quantity shrinks to 1001 and the report shows the panic. When the first failure is the wrong discount, the case shrinks to 101 instead. Either way, the report describes the bug the run found. A stateful test keys its failures by command and check, so a failing postcondition of one command cannot turn into the panic of another.
 
+## When a failure does not recur
+
+Before shrinking, `Check` replays the failing case once with the same choices. A property that depends only on its input fails again, in the same way. The replay can pass, discard the case or fail at another place. Then the property or a generator depends on something besides the choices, such as a clock, a global variable or the order of goroutines. The report then carries a `HealthFlaky` note.
+
+```go
+// The cache keeps a hit counter across cases, so the outcome of a case
+// depends on the cases that ran before it.
+var hits atomic.Int64
+
+var flakyProperty = func(t *pbt.T) {
+	key := pbt.IntRange(0, 9).Draw(t, "key")
+	if hits.Add(1)%7 == 0 && key > 2 {
+		t.Fatalf("cache miss for key %d", key)
+	}
+}
+```
+
+```text
+[pbt] property failed after 55 passed checks and 3 shrink steps (size 42)
+[pbt] key (IntRange(0, 9)) = 4
+[pbt] error: cache miss for key 4
+[pbt] reproduce: go test -run 'TestCache' -pbt.seed=0x1
+[pbt] health: HealthFlaky: the failure did not recur when its input was replayed (the replay passed); the original failure was at flaky_test.go:21 (IgnoreHealth(HealthFlaky) hides it)
+```
+
+`Check` still shrinks and saves the case, since a failure that recurs only sometimes, such as a race in chapter 6, is still a failure. The note tells you that the shrunk case may not fail again when you replay it. Fix the property before you trust its reports. A parallel test of chapter 6 that catches a race can carry the note, and there it is expected.
+
 ## What shrinking will not do
 
-The shrinker reaches a local minimum, not always the global one: it only accepts candidates that are simpler by its own measure, so a smaller case that needs a larger intermediate step stays out of reach. `LetShrink` and `ShrinkTo` exist for the cases where the structure of a value hides the simpler form. The size parameter stays fixed while a case shrinks, and the time budget is 30 seconds per failure; `ShrinkTime` or `-pbt.shrinktime` change it.
+The shrinker reaches a local minimum, not always the global one: it only accepts candidates that are simpler by its own measure, so a smaller case that needs a larger intermediate step stays out of reach. `LetShrink` and `ShrinkTo` exist for the cases where the structure of a value hides the simpler form. The size parameter stays fixed while a case shrinks, and the time budget is 30 seconds per failure; `ShrinkTime` or `-pbt.shrinktime` change it. Shrinking can stop at the budget or at its fixed limit of 200,000 steps. The report then carries a `HealthShrink` note, because a smaller case may exist.
 
 ---
 
@@ -452,7 +613,7 @@ This chapter covers the shape of a run: how many cases, which sizes, how discard
 
 ## Options and flags
 
-Every setting has a flag for the whole `go test` run and an option for one `Check` call. Options win over flags.
+Most settings have a flag for the whole `go test` run and an option for one `Check` call. Options win over flags, except for the health checks, where the flags and the options add up.
 
 | Flag | Option | Default | Meaning |
 | --- | --- | --- | --- |
@@ -460,6 +621,7 @@ Every setting has a flag for the whole `go test` run and an option for one `Chec
 | `-pbt.seed` | `Seed(s)` | random | seed of the run, printed in every report |
 | `-pbt.startsize`, `-pbt.maxsize` | `Sizes(start, max)` | 1, 42 | size of the first case and the size the cases grow to |
 | `-pbt.shrinktime` | `ShrinkTime(d)` | 30s | time budget for shrinking one failure |
+| `-pbt.failures` | `MaxFailures(n)` | 1 | distinct failures to collect, shrink and report |
 | `-pbt.searchsteps` | `SearchSteps(n)` | 1000 | cases of a targeted search |
 | `-pbt.nosave` | `NoSave()` | false | do not save failing cases |
 | `-pbt.replay` | `ReplayFile(path)` | none | a saved case to replay before searching |
@@ -468,6 +630,8 @@ Every setting has a flag for the whole `go test` run and an option for one `Chec
 | | `NoReplay()` | false | skip the saved cases |
 | | `Setup(f)` | none | run `f` before every case |
 | | `CheckCoverage()` | false | fail on an unmet or undecided `Cover` requirement |
+| `-pbt.checkhealth` | `CheckHealth(checks...)` | none | health checks that fail a passing run (chapter 2) |
+| `-pbt.ignorehealth` | `IgnoreHealth(checks...)` | none | health checks to hide |
 | | `ReportLimit(chars)`, `ReportDepth(levels)` | 2000, 3 | size of a reported value and depth of nested draws |
 
 ```go
@@ -637,9 +801,39 @@ func TestPanics(t *testing.T) {
 
 `Recover` runs a function and returns what it panicked with, or nil, so a property can assert that invalid input panics. `NoPanic` takes a function and generates its arguments with `Make`, which chapter 9 describes; the `WithType` and `WithField` options narrow the arguments.
 
+## Several failures in one run
+
+A run normally stops at the first failure, shrinks it and reports it. A function with two bugs then shows them one at a time: you fix the first and run again to meet the second. `MaxFailures(n)` or `-pbt.failures=n` keeps the run going after a failure. It collects up to `n` failures that fail in different ways, shrinks each one, saves each one and reports each one.
+
+```go
+var portProperty = func(t *pbt.T) {
+	s := pbt.StringOf(pbt.SampledFrom([]rune("0123456789"))).Draw(t, "s")
+	n, ok := parsePort(s)
+	if ok && !validPort(s) {
+		t.Fatalf("parsePort(%q) accepted %d", s, n)
+	}
+	if !ok && validPort(s) {
+		t.Fatalf("parsePort(%q) rejected a valid port", s)
+	}
+}
+```
+
+```text
+[pbt] failure 1 of 2: property failed after 6 passed checks and 9 shrink steps (size 4)
+[pbt] s (StringOf(SampledFrom(10 values))) = "0"
+[pbt] error: parsePort("0") accepted 0
+[pbt] reproduce: go test -run 'TestPort' -pbt.seed=0x1 -pbt.failures=2
+[pbt] failure 2 of 2: property failed after 6 passed checks and 90 shrink steps (size 8)
+[pbt] s (StringOf(SampledFrom(10 values))) = "7000"
+[pbt] error: parsePort("7000") rejected a valid port
+[pbt] reproduce: go test -run 'TestPort' -pbt.seed=0x1 -pbt.failures=2
+```
+
+Two failures are different when they fail at different lines, or panic with different types or at different places. That is the same identity that keeps a shrink on one bug (chapter 3). A failure that the shrinker meets on the way, failing in a new way, becomes one of the `n` as well. Each failure gets the full `ShrinkTime` budget. The second minimum, 7000, is a local one. The true boundary is 6554, but the path to it needs a larger digit in a later place, and the shrinker does not try that. Saved failures replay together, and a run that replays a failing saved case does not search for more. `CheckExists` ignores the option.
+
 ## Seeds, saved cases and replay
 
-Every report ends with a `reproduce:` line that carries the seed of the run. Passing that seed with `-pbt.seed` repeats the same sequence of cases, including the failing one, on the same version of both the property code and pbt. Updating pbt can change the generated cases for a seed. In v0.3.2 the integer generation fix changes some seeded runs; existing saved choice sequences still replay as before.
+Every report ends with a `reproduce:` line that carries the seed of the run. Passing that seed with `-pbt.seed` repeats the same sequence of cases, including the failing one, on the same version of both the property code and pbt. Updating pbt can change the generated cases for a seed. In v0.3.2 the integer generation fix changes some seeded runs. In v0.4.0, `Make` generates different values for some recursive types, and the shrinker can reach other, smaller cases. A saved case replays its choices through the generators of the installed version. After an upgrade, a saved case of a property that uses `Make` on a recursive type can produce a different value.
 
 The failing case is also saved under `testdata/pbt/<TestName>/<hash>` as a text file with the size, the drawn values as comments, and the choices. Every later `Check` of the same test replays the saved cases before generating new ones and fails if one still fails, so the regression case follows the code into version control. Delete the file to drop the case. Three options adjust this behavior: `NoSave` keeps a run from writing, `NoReplay` skips the saved cases, and `ReplayFile` or `-pbt.replay=FILE` replays one saved file in any test, which is how you hand a case from one test to another or reproduce a failure from a CI log.
 
@@ -785,7 +979,7 @@ func (q *leakyQueue) Close(id int) error {
 The report shows the program, the history of the run and the model state before the step that failed.
 
 ```text
-[pbt] property failed after 5 passed checks and 65 shrink steps (size 6)
+[pbt] property failed after 5 passed checks and 81 shrink steps (size 6)
 [pbt] cmds (Commands) = Program{
 [pbt]     var1 = issue()
 [pbt]     var2 = close(var1)
@@ -1004,15 +1198,69 @@ var walkProperty = func(t *pbt.T) {
 A random walk of `n` steps ends about `sqrt(n)` away from the origin, so 100 random walks almost never reach 50. With `t.Maximize("position", pos)`, the run turns into a search once the first case reports a utility. pbt mutates the choices of the best case so far, keeps a mutation when its utility is higher, sometimes keeps a worse one early in the search to escape a local maximum, and occasionally restarts from a fresh case. The search runs for the number of steps set by `SearchSteps` or `-pbt.searchsteps`, 1000 by default, instead of the number of checks.
 
 ```text
-[pbt] property failed after 246 passed checks and 1835 shrink steps (size 33)
+[pbt] property failed after 246 passed checks and 2039 shrink steps (size 33)
 [pbt] utility position = 51
 [pbt] steps (SliceOf(SampledFrom(2 values))) = []int{1, 1, 1, 1, …}
 [pbt] error: the walk reached 51
 ```
 
-The search found a walk past 50 after 246 cases, and the shrinker then reduced it to 51 steps to the right, the smallest input that fails. When the property passes, the summary reports the best utility seen. `t.Minimize` searches in the other direction. A case has one utility: a second `Maximize` with the same name replaces the value, and one with another name is an error.
+The search found a walk past 50 after 246 cases, and the shrinker then reduced it to 51 steps to the right, the smallest input that fails. When the property passes, the summary reports the best utility seen. `t.Minimize` searches in the other direction. A second `Maximize` with the same name replaces the value of the case.
 
 Use the search when a property has a notion of "closer": the depth of a tree, the length of a queue, the number of retries, the distance to a boundary. A utility that is flat over most inputs gives the search nothing to climb.
+
+## Several objectives
+
+A case can report several utilities under different names. The search then keeps a current and a best case for each objective, and the objectives take turns. Each step mutates the current case of one objective, in the order in which the objectives first appeared. It judges the mutation by that objective's utility alone.
+
+```go
+// simulate runs jobs of the given durations on a pool of workers and
+// returns the longest queue and the longest wait.
+func simulate(jobs []int, workers int) (longestQueue, longestWait int) {
+	free := make([]int, workers) // the time at which each worker is free
+	for i, d := range jobs {
+		w := 0
+		for k := range free {
+			if free[k] < free[w] {
+				w = k
+			}
+		}
+		start := max(free[w], i) // job i arrives at time i
+		longestWait = max(longestWait, start-i)
+		waiting := 0
+		for _, f := range free {
+			if f > i {
+				waiting++
+			}
+		}
+		longestQueue = max(longestQueue, waiting)
+		free[w] = start + d
+	}
+	return longestQueue, longestWait
+}
+
+var poolProperty = func(t *pbt.T) {
+	jobs := pbt.SliceOf(pbt.IntRange(1, 10)).Draw(t, "jobs")
+	workers := pbt.IntRange(1, 4).Draw(t, "workers")
+	queue, wait := simulate(jobs, workers)
+	t.Maximize("queue", float64(queue))
+	t.Maximize("wait", float64(wait))
+	if wait > 100 {
+		t.Fatalf("a job waited %d", wait)
+	}
+}
+```
+
+```text
+[pbt] property failed after 41 passed checks and 3005 shrink steps (size 26)
+[pbt] utility queue = 1
+[pbt] utility wait = 101
+[pbt] jobs (SliceOf(IntRange(1, 10))) = []int{3, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 1}
+[pbt] workers (IntRange(1, 4)) = 1
+[pbt] error: a job waited 101
+[pbt] reproduce: go test -run 'TestPool' -pbt.seed=0x1
+```
+
+The report lists every utility of the failing case. A passing run lists the best value of each objective in its summary. The objectives share the search steps, so give a run with several of them more steps with `SearchSteps`. A property with a single objective searches exactly as before.
 
 ## Existence
 
@@ -1020,7 +1268,8 @@ Use the search when a property has a notion of "closer": the depth of a tree, th
 
 ```go
 // CheckExists succeeds once a case passes: here, a Pythagorean triple. The
-// witness is shrunk and logged.
+// witness is shrunk and logged. The seed keeps the run reproducible: a few
+// seeds need more than 5000 cases to meet a triple.
 func TestATripleExists(t *testing.T) {
 	pbt.CheckExists(t, func(t *pbt.T) {
 		a := pbt.IntRange(1, 50).Draw(t, "a")
@@ -1029,12 +1278,12 @@ func TestATripleExists(t *testing.T) {
 		if a*a+b*b != c*c {
 			t.Fail()
 		}
-	}, pbt.Checks(5000))
+	}, pbt.Checks(5000), pbt.Seed(1))
 }
 ```
 
 ```text
-[pbt] witness found after 2748 rejected cases and 14 shrink steps (seed 0x83d3334683123f8d) (size 42)
+[pbt] witness found after 98 rejected cases and 29 shrink steps (seed 0x1) (size 42)
 [pbt] a (IntRange(1, 50)) = 3
 [pbt] b (IntRange(1, 50)) = 4
 [pbt] c (IntRange(1, 70)) = 5
@@ -1052,33 +1301,43 @@ Writing a generator for every struct of a program is tedious, and most of the ti
 
 ```go
 type Order struct {
-	ID       int      `pbt:"min=1"`
-	Items    []string `pbt:"min=1,max=5"`
-	Note     string   `pbt:"-"` // stays zero
-	Placed   time.Time
-	internal int // unexported fields stay zero
+	ID       int        `pbt:"min=1"`
+	Items    []string   `pbt:"min=1,max=5"`
+	Note     string     `pbt:"-"` // stays zero
+	Placed   time.Time  `pbt:"min=2026-01-01T00:00:00Z,max=2026-12-31T23:59:59Z"`
+	Client   netip.Addr // generated with pbt.Addr
+	internal int        // unexported fields stay zero
 }
 
 var orderGen = pbt.Make[Order](
-	pbt.WithType(pbt.Map(pbt.IntRange(0, 364), func(d int) time.Time {
-		return time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC).AddDate(0, 0, d)
-	})),
 	pbt.WithField[Order]("Items", pbt.SliceOfN(pbt.StringN(1, 8), 1, 5)),
 )
 
 func TestOrders(t *testing.T) {
 	pbt.Check(t, func(t *pbt.T) {
 		o := orderGen.Draw(t, "order")
-		if o.ID < 1 || len(o.Items) == 0 || o.Note != "" || o.Placed.Year() != 2026 {
+		if o.ID < 1 || len(o.Items) == 0 || o.Note != "" || o.Placed.Year() != 2026 || !o.Client.IsValid() {
 			t.Fatalf("unexpected order %+v", o)
 		}
 	})
 }
 ```
 
-`Make[T]` builds a generator for `T` from its fields, recursively. A `pbt` struct tag adjusts a field: `min` and `max` bound a number or the length of a string, slice or map, and `-` leaves the field zero. Two options replace generators: `WithType(g)` for every value of a type, which is how `time.Time` gets a generator above, and `WithField[S](name, g)` for one field of a struct.
+`Make[T]` builds a generator for `T` from its fields, recursively. A `pbt` struct tag adjusts a field: `min` and `max` bound a number or the length of a string, slice or map, and `-` leaves the field zero. Two options replace generators: `WithType(g)` for every value of a type, and `WithField[S](name, g)` for one field of a struct. `Items` gets its non-empty strings from `WithField` above.
 
-Some types need help. Unexported fields stay zero, because reflection cannot set them, so a type whose state is all unexported needs `WithType`. Interfaces, channels and functions have no derivable generator and need `WithType` or `WithField` as well; `Make` panics with the field name when one is missing.
+`Make` knows the types of the standard library whose state is unexported, and uses the generators of chapter 1 for them.
+
+| Type | Generator |
+| --- | --- |
+| `time.Time` | `Time`, or `TimeRange` with `min` and `max` |
+| `*time.Location` | `FixedZone` |
+| `netip.Addr`, `netip.Prefix`, `netip.AddrPort` | `Addr`, `Prefix`, `AddrPort` |
+| `net.IP` | addresses of `Addr` in both the 4-byte and the 16-byte form |
+| `net.HardwareAddr` | `HardwareAddr` |
+
+A `time.Time` field takes `min` and `max` as RFC 3339 timestamps, as `Placed` does above. `time.Duration` stays an integer type and is drawn like any `int64`.
+
+Other types need help. Unexported fields stay zero, because reflection cannot set them, so a type whose state is all unexported needs `WithType`. Interfaces, channels and functions have no derivable generator and need `WithType` or `WithField` as well; `Make` panics with the field name when one is missing.
 
 `NoPanic` from chapter 4 uses `Make` for the arguments of the function it tests, and accepts the same options.
 
@@ -1122,7 +1381,42 @@ func TestExprSize(t *testing.T) {
 }
 ```
 
-`Bounded(leaf, node)` is the lower-level form: it keeps one recursion budget per value, shared by every bounded generator drawn while that value is built, which is what two mutually recursive types need. `Make` applies the same budget to recursive structs, so a self-referential struct does not grow without end.
+`Bounded(leaf, node)` is the lower-level form: it keeps one recursion budget per value, shared by every bounded generator drawn while that value is built, which is what two mutually recursive types need.
+
+`Make` bounds the whole value instead. One value gets an allowance of `8*max(size, 1)` units of growth. Every collection element, every rune of a string, every map entry that `Make` tries and every non-nil pointer spends one unit, however deep it sits. When the allowance is spent, collections stop growing and recursive references stay nil or empty. The work of a value therefore grows linearly with the size. Fixed fields, arrays and the minimum lengths of tags are still completed, except where a minimum length would recurse without end.
+
+```go
+// A directory holds files and directories. Make shares one allowance of
+// growth across the whole value, so a tree stays proportional to the size
+// parameter however the fields nest.
+type Dir struct {
+	Name  string
+	Files []string
+	Dirs  []Dir
+}
+
+func countNodes(d Dir) int {
+	n := 1 + len(d.Files) + len([]rune(d.Name))
+	for _, s := range d.Files {
+		n += len([]rune(s))
+	}
+	for _, c := range d.Dirs {
+		n += countNodes(c)
+	}
+	return n
+}
+
+func TestDirectoryTrees(t *testing.T) {
+	pbt.Check(t, func(t *pbt.T) {
+		d := pbt.Make[Dir]().Draw(t, "dir")
+		if n := countNodes(d); n > 8*max(t.Size(), 1)+1 {
+			t.Fatalf("%d elements at size %d", n, t.Size())
+		}
+	})
+}
+```
+
+`BoundedGrowth(g)` gives a hand-written generator the same allowance: the collections and pointers drawn inside `g` share it. `UnboundedGrowth(g)` exempts a part from the surrounding allowance, which is what an explicit override needs when its own length rules come first. `Make` uses it for `WithType` and `WithField`.
 
 ## pbtgen
 
@@ -1132,11 +1426,129 @@ func TestExprSize(t *testing.T) {
 //go:generate go run go.ymotongpoo.com/pbt/cmd/pbtgen -type Order,Customer
 ```
 
-For each type `T`, `go generate` writes a function `GenT` returning `pbt.Gen[T]` into `pbt_gen.go`. The struct tags of `Make` apply, and a `gen=EXPR` tag names a Go expression to use as the generator of a field, such as a variable of type `pbt.Gen[string]` in the same package. Recursive types, including mutually recursive ones, are generated through `Bounded`.
+For each type `T`, `go generate` writes a function `GenT` returning `pbt.Gen[T]` into `pbt_gen.go`. The struct tags of `Make` apply, and a `gen=EXPR` tag names a Go expression to use as the generator of a field, such as a variable of type `pbt.Gen[string]` in the same package. The generated code uses the same standard generators and the same allowance as `Make`, through `BoundedGrowth`. A type without unexported fields therefore gets the same values from both for the same seed, mutually recursive types included. A type with unexported fields gets more from pbtgen, which fills them.
 
 Three flags adjust the output. `-output` names the file. `-prefix` replaces `Gen` in the function names, and pbtgen refuses to write a name that the package already declares, so a hand-written generator is never overwritten. pbtgen reads the files that `go build` would compile on the current platform, so files excluded by build constraints do not affect the generated code.
 
 Choose `Make` when the type changes often or the generator is needed in one test; choose pbtgen when the generator is part of the package's test support, when unexported fields matter, or when a compile error is preferable to a panic at test time.
+
+---
+
+# Standard formats
+
+Many inputs of a program are strings in a format that a standard defines: timestamps, e-mail addresses, URIs, JSON, UUIDs, language tags. The package `go.ymotongpoo.com/pbt/format` generates them. Every generator returns a `pbt.Gen[string]` and builds its values from the grammar of the standard. Every value is valid, including the values the shrinker tries.
+
+```go
+import "go.ymotongpoo.com/pbt/format"
+```
+
+The generators of chapter 1 return Go types, such as a `time.Time` or a `netip.Addr`. The generators of this package return text. `pbt.IPv6()` gives an address; `format.RFC4291IPv6()` gives the ways to write one.
+
+## Two names for two questions
+
+A format raises two questions. What should a program write? What must a parser accept? The answers differ, and the package gives each one its own name.
+
+- A function with a plain name, such as `Email`, `URL` or `HTTPDate`, generates the common or canonical form. Use it for the input of code that produces or stores the format, and for values that should pass every validator.
+- A function named after a standard, such as `RFC5321Mailbox`, `RFC3986URI` or `RFC9110HTTPDate`, generates the alternatives of the standard's production. Use it to test a parser. It leaves out only what the standard forbids generators to produce, such as the obsolete syntax of RFC 5322. Its documentation names those parts and the bounds it puts on open lengths.
+
+`Time(layout)` takes the layout constants of package `time`, so `format.Time(time.RFC1123)` generates what `time.Time.Format` writes for that layout. It is the alias for what Go writes; `RFC3339` is the alias for what RFC 3339 allows.
+
+| Area | What a program writes | What a parser must accept |
+| --- | --- | --- |
+| Timestamps | `Time(time.RFC3339)`, `HTTPDate` | `RFC3339`, `RFC3339FullDate`, `RFC3339FullTime`, `RFC9110HTTPDate`, `RFC5322DateTime` |
+| Durations | `ISO8601Duration` | `RFC3339Duration` |
+| Addresses | `IPv4`, `RFC5952IPv6`, `CIDR`, `MAC` | `RFC4291IPv6` |
+| Host names | `Hostname`, `IDNAHostname`, `UnicodeHostname` | `RFC1035Domain` |
+| E-mail | `Email`, `HTMLEmail`, `SMTPUTF8Mailbox` | `RFC5321Mailbox`, `RFC5322AddrSpec` |
+| URIs | `URL` | `RFC3986URI`, `RFC3986Reference` |
+| HTTP | `HTTPToken`, `HTTPFieldName`, `HTTPFieldValue`, `MediaType` | `RFC9110FieldValue`, `RFC9110MediaType`, `RFC6265Cookie`, `RFC6265SetCookie` |
+| Data | `JSON`, `IJSON`, `JSONPointer`, `JSONPointerFragment`, `UUID`, `SemVer`, `LanguageTag` | `RFC4180CSV`, `RFC5646LanguageTag` |
+| Encodings | `Base64`, `Base64URL`, `Base32`, `Base32Hex`, `Base16`, `Hex` and the unpadded `Raw` forms | |
+| Numbers | `PhoneNumber`, `PaymentCard`, `ISBN13`, `ISBN10` | |
+
+## Testing a parser
+
+A property that feeds a parser every form of its standard finds where the parser departs from it. Every RFC 3339 timestamp should parse with the layout of the same name.
+
+```go
+// Every timestamp of RFC 3339 should parse with the RFC3339 layout of
+// package time.
+var rfc3339Property = func(t *pbt.T) {
+	s := format.RFC3339().Draw(t, "")
+	if _, err := time.Parse(time.RFC3339, s); err != nil {
+		t.Fatalf("time.Parse rejects %s: %v", s, err)
+	}
+}
+```
+
+```text
+[pbt] property failed after 1 passed checks and 19 shrink steps (size 2)
+[pbt] s (RFC3339()) = "1970-01-01T00:00:00z"
+[pbt] error: time.Parse rejects 1970-01-01T00:00:00z: parsing time "1970-01-01T00:00:00z" as "2006-01-02T15:04:05Z07:00": cannot parse "z" as "Z07:00"
+[pbt] reproduce: go test -run 'TestRFC3339' -pbt.seed=0x1
+```
+
+RFC 3339 allows a lower-case `z` and `t`, and `time.Parse` rejects them, as it rejects the leap second `23:59:60`. Whether that matters depends on where your timestamps come from. The property makes the decision visible, and the shrunk case shows the difference in one character. The documentation of each generator lists the differences between the standard and the parsers of Go's standard library, as measured on Go 1.26. The tests of the package pin them.
+
+## Testing what a program writes
+
+For the input of a program, the plain names give values that every reasonable consumer accepts. A sign-up form can store `format.Email()` and expect `net/mail` to read the same address back.
+
+```go
+// A sign-up form stores the address it receives, and the confirmation mail
+// must reach the same mailbox.
+func TestSignupAddresses(t *testing.T) {
+	pbt.Check(t, func(t *pbt.T) {
+		email := format.Email().Draw(t, "email")
+		addr, err := mail.ParseAddress(email)
+		if err != nil || addr.Address != email {
+			t.Fatalf("mail.ParseAddress(%q) = %v, %v", email, addr, err)
+		}
+	})
+}
+```
+
+The generators lean toward the cases that break code, as the generators of chapter 1 do. In a share of the cases:
+
+- `Email` makes local parts of exactly 64 characters, and `Hostname` makes names of exactly 253.
+- `RFC3339` writes leap seconds and the offset `-00:00`.
+- `JSON` writes numbers far beyond 64 bits and unpaired surrogate escapes.
+
+The documentation of each generator says how often.
+
+```go
+func TestDecoders(t *testing.T) {
+	pbt.Check(t, func(t *pbt.T) {
+		doc := format.JSON().Draw(t, "doc")
+		if !json.Valid([]byte(doc)) {
+			t.Fatalf("json.Valid rejects %s", doc)
+		}
+		link := format.URL().Draw(t, "link")
+		u, err := url.Parse(link)
+		if err != nil || u.Host == "" {
+			t.Fatalf("url.Parse(%q) = %v, %v", link, u, err)
+		}
+		at := format.Time(time.RFC1123Z).Draw(t, "at")
+		if _, err := time.Parse(time.RFC1123Z, at); err != nil {
+			t.Fatal(err)
+		}
+	})
+}
+```
+
+## How the values shrink
+
+Values shrink toward short valid strings: `a@a.aa` for `Email`, `http://a` for `URL`, `1970-01-01T00:00:00Z` for `RFC3339`, `null` for `JSON`. The shrinker prefers fewer choices, so a part can also shrink within the alternative it started from. A quoted local part, for example, shrinks toward the empty quoted string, `""@a`. The documentation of each generator lists the targets of every alternative.
+
+## What the package leaves out
+
+The package generates syntax, not registered values.
+
+- A language tag is well-formed, but its subtags are not checked against the IANA registry.
+- A payment card number has a correct check digit, but no issuer assigned it.
+- An ISBN is not hyphenated, since the hyphens depend on ranges that the ISBN agency publishes.
+
+The package has no tables that follow a registry, such as the country codes of ISO 3166 or the currencies of ISO 4217, because they change with the registry. Write them with `SampledFrom` over the values your program supports.
 
 ---
 
@@ -1186,7 +1598,8 @@ A test whose name ends in `Mutant` runs a property against a planted bug and is 
 ## Reference material
 
 - The [package documentation](https://pkg.go.dev/go.ymotongpoo.com/pbt) on pkg.go.dev describes every function and option, with runnable examples.
-- [DESIGN.md](https://github.com/ymotongpoo/pbt/blob/main/DESIGN.md) records the design decisions and the comparison with PropEr, QuickCheck, Hypothesis and rapid, with a Japanese version in DESIGN.ja.md.
+- The documentation of [package format](https://pkg.go.dev/go.ymotongpoo.com/pbt/format) describes every format, the parts of its standard that it covers, and its shrink targets.
+- [DESIGN.md](https://github.com/ymotongpoo/pbt/blob/main/DESIGN.md) records the design decisions and the comparison with PropEr, QuickCheck, Hypothesis, rapid and Hegel, with a Japanese version in DESIGN.ja.md.
 - [CHANGELOG.md](https://github.com/ymotongpoo/pbt/blob/main/CHANGELOG.md) lists the changes of each release. The API may still change before v1.0.
 - Issues and questions go to the [GitHub repository](https://github.com/ymotongpoo/pbt).
 
@@ -1198,6 +1611,9 @@ go test ./... -pbt.seed=0x1c3           # repeat a run
 go test ./... -pbt.startsize=10 -pbt.maxsize=100
 go test ./... -pbt.shrinktime=2m
 go test ./... -pbt.searchsteps=5000     # longer targeted searches
+go test ./... -pbt.failures=3           # collect up to three distinct failures
+go test ./... -pbt.checkhealth=default  # fail on wasted or oversized input
+go test ./... -pbt.ignorehealth=slow    # hide the timing warning
 go test ./... -pbt.nosave               # keep testdata/pbt untouched
 go test ./... -pbt.replay=testdata/pbt/TestQueue/3f2a… -run TestQueue
 go test ./... -pbt.v                    # summaries and shrink steps
