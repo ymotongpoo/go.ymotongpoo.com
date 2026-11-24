@@ -45,7 +45,14 @@ type module struct {
 	Description string // a paragraph, for the module page
 	Docs        bool   // whether public/guide/<Path> holds the documentation
 	Links       []link // further links on the module page
+	Moved       []move // documentation pages that moved, redirected with 301
 }
+
+// move names a page of the documentation that moved, by its clean URL
+// below /<module>/guide/ without a language directory, such as
+// "10-reference". The redirect covers every language and the .md and .html
+// spellings of the old page.
+type move struct{ From, To string }
 
 // Import returns the full import path of the module.
 func (m module) Import() string { return host + "/" + m.Path }
@@ -239,6 +246,18 @@ func redirects(views []view) string {
 			}
 			if v.LlmsFull {
 				rule("/"+v.Path+"/llms-full.txt", "/guide/"+v.Path+"/llms-full.txt", "200")
+			}
+			dirs := []string{""}
+			for _, l := range v.Langs {
+				dirs = append(dirs, l.Code+"/")
+			}
+			for _, m := range v.Moved {
+				for _, d := range dirs {
+					old, now := "/"+v.Path+"/guide/"+d+m.From, "/"+v.Path+"/guide/"+d+m.To
+					rule(old, now, "301")
+					rule(old+".html", now, "301")
+					rule(old+".md", now+".md", "301")
+				}
 			}
 		}
 		rule("/"+v.Path, "/goimport/"+v.Path+"/", "200")

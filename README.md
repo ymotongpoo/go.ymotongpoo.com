@@ -64,6 +64,9 @@ exact paths first (`/<module>/guide` → `/<module>/guide/` with 301, the
 the splats: `/<module>/guide/*` → `/guide/<module>/:splat` and the
 catch-all `/<module>/*` → `/goimport/<module>/`, which is what makes
 `/<module>/<subpackage>?go-get=1` answer with the module's tags.
+A page of the documentation that was renamed is listed in the `Moved`
+field of its module, and the generator writes a 301 from its old clean
+URL, `.html` and `.md` spellings, in every language, before the splats.
 
 Two pitfalls shape the layout. The rule validator drops a rule whose
 destination names an `index.html` or `.html` file as an infinite loop, so

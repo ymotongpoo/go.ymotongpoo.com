@@ -78,3 +78,21 @@ func TestPublishedMarkdownCanonicalTargets(t *testing.T) {
 		t.Fatalf("%d rules exceed the Pages limit of 100", rules)
 	}
 }
+
+func TestMovedPagesRedirect(t *testing.T) {
+	v := view{module: module{Path: "pbt", Docs: true, Moved: []move{{From: "10-reference", To: "11-reference"}}},
+		docs: docs{Langs: []lang{{Code: "ja"}}}}
+	got := redirects([]view{v})
+	for _, want := range []string{
+		"/pbt/guide/10-reference", "/pbt/guide/11-reference",
+		"/pbt/guide/ja/10-reference.md", "/pbt/guide/ja/11-reference.md",
+		"/pbt/guide/10-reference.html",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("missing %s in\n%s", want, got)
+		}
+	}
+	if strings.Index(got, "/pbt/guide/10-reference ") > strings.Index(got, "/pbt/guide/* ") {
+		t.Errorf("the moved page must come before the splat:\n%s", got)
+	}
+}

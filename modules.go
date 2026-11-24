@@ -7,7 +7,7 @@ package main
 // here, run `go run .` and deploy; the module page with its go-import tags,
 // the index, the llms.txt index and the Cloudflare rules follow. A module
 // that publishes documentation copies it into public/guide/<Path>/ and sets
-// Docs to true.
+// Docs to true; Moved redirects the old URL of a page that was renamed.
 var modules = []module{
 	{
 		Path:    "pbt",
@@ -16,7 +16,8 @@ var modules = []module{
 		Description: "Property-based testing for Go with the feature set of PropEr: typed generators with automatic shrinking, " +
 			"distributions you control and statistics to check them, stateful and parallel command testing, " +
 			"state machines, targeted search and existential properties.",
-		Docs: true,
+		Docs:  true,
+		Moved: []move{{From: "10-reference", To: "11-reference"}}, // v0.4.0 added the chapter on standard formats
 		Links: []link{
 			{Text: "Ports of every chapter of PropEr Testing, and practical examples", URL: "https://github.com/ymotongpoo/pbt/tree/main/examples"},
 			{Text: "Changelog", URL: "https://github.com/ymotongpoo/pbt/blob/main/CHANGELOG.md"},
