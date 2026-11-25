@@ -155,6 +155,74 @@ The report shows the program, the history of the run and the model state before 
 
 The first failing sequence had several issues and closes. The shrinker removed commands one by one, regenerating the following commands from the new model state and checking their preconditions, until three remained: the shortest program that shows the leak. The failure is keyed by the check and the command, "postcondition of open", so shrinking does not trade it for a different failure.
 
+## Finding the step that caused a failure
+
+The command that detects a failure can run long after the command that caused it. `Causality(n)` or `-pbt.causality=n` samples continuations of the first failing program before shrinking. The default, zero, disables this analysis.
+
+For each sampled prefix, pbt keeps the choices through its last command and generates `n` fresh continuations at the original size. The report gives the fraction that fail with the original failure identity. Discarded continuations do not enter that fraction. A rise suggests that a command in the retained prefix made the failure more likely.
+
+This property loses a value during `write(7)`, then detects the loss in `read()` after four unrelated commands:
+
+```go
+var delayedWriteProperty = func(t *pbt.T) {
+	step, want, stored := 0, 0, 0
+	init := func() { step, want = 0, 0 }
+	next := func(pbt.Var) { step++ }
+	gen := func() pbt.CommandGen {
+		switch step {
+		case 0:
+			return pbt.Map(pbt.IntRange(0, 15), func(value int) pbt.Command {
+				return pbt.Command{
+					Name: "write", Args: []any{value},
+					Run: func(pbt.Env) any {
+						stored = value
+						if value == 7 {
+							stored = 0 // planted bug: this write loses its value
+						}
+						return nil
+					},
+					Next: func(pbt.Var) { want = value; step++ },
+				}
+			})
+		case 5:
+			return pbt.Just(pbt.Command{
+				Name: "read", Next: next,
+				Run: func(pbt.Env) any { return stored },
+				Post: func(_ pbt.Env, result any) error {
+					if result.(int) != want {
+						return fmt.Errorf("read %d, want %d", result, want)
+					}
+					return nil
+				},
+			})
+		default:
+			return pbt.Just(pbt.Command{Name: "wait", Next: next})
+		}
+	}
+	pbt.Commands(init, gen, pbt.Length(6, 6)).Draw(t, "program").RunSequential(t)
+}
+```
+
+`TestCausalityFindsEarlyWrite` runs it with `Seed(1)` and `Causality(32)`. The report contains these lines; the program, history and later prefix rates are omitted here:
+
+```text
+[pbt] property failed after 38 passed checks and 16 shrink steps (size 39)
+[pbt] error: step 6: postcondition of read() failed: read 0, want 7
+[pbt] reproduce: go test -run 'TestDelayedWrite' -pbt.seed=0x1
+[pbt] causality (32 continuations per prefix, seed 0x1):
+[pbt]   steps are generated commands of the first failing case, before shrinking in this run
+[pbt]   after 0 of 6 steps: 0/32 fail with the same identity
+[pbt]   after 1 of 6 steps: 32/32 fail with the same identity <- largest measured rise at step 1: write(7)
+```
+
+Keeping the first command makes every sampled continuation fail, although the postcondition fails at step 6. Here `Length(6, 6)` preserves the delayed check during shrinking. In a variable-length program, shrinking can remove commands and change step numbers. The causality report refers to the first failing program before that shrink.
+
+Analysis costs at most `16*n` extra property executions, beyond the usual stability replay. It samples up to eight spaced prefixes and bisects the largest measured rise up to eight times. These executions run setup and cleanup, so reset the system for every property invocation. They do not count toward checks or statistics, call `OnFail`, or save cases.
+
+The analysis applies to sequential `Commands` programs, including `fsm.Commands`. It skips parallel programs because generation order is not execution order. It also skips a failure that the stability replay cannot reproduce. `MaxFailures` analyzes only the first failure; `CheckExists` ignores the option. For a saved case, pbt analyzes the replayed program, since the original unshrunk program is unavailable.
+
+A rise identifies a candidate cause, not proof. Sampling noise can hide a rise, rates can fall again, and a long trace may leave only a range of candidate steps.
+
 ## Writing good models
 
 - Change the model only in `init` and `Next`; `Pre`, `Post` and `gen` read it. pbt replays a sequence by calling `init` and then the `Next` of every command, so a change made anywhere else is lost on the replay, and a value that `init` forgets to reset leaks from one case into the next.

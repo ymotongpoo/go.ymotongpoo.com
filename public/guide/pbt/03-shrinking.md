@@ -146,6 +146,44 @@ var discountProperty = func(t *pbt.T) {
 
 Suppose the first failing case is a quantity of 3000, which panics. Without the rule, the shrinker would lower the quantity past 1000, find that 101 fails the assertion, and report a wrong discount; the panic would be gone from the report. With the rule, the quantity shrinks to 1001 and the report shows the panic. When the first failure is the wrong discount, the case shrinks to 101 instead. Either way, the report describes the bug the run found. A stateful test keys its failures by command and check, so a failing postcondition of one command cannot turn into the panic of another.
 
+One assertion site can cover several causes. `t.Signature(name)` assigns a stable name to the cause for the current case. This version of the [port property in chapter 4](04-properties.md#several-failures-in-one-run) uses one `Fatalf` for both bugs:
+
+```go
+// parsePort is the parser with two bugs from chapter 4.
+var namedPortProperty = func(t *pbt.T) {
+	s := pbt.StringOf(pbt.SampledFrom([]rune("0123456789"))).Draw(t, "s")
+	_, accepted := parsePort(s)
+	want := validPort(s)
+	if accepted != want {
+		cause := "rejected valid port"
+		if accepted {
+			cause = "accepted invalid port"
+		}
+		t.Signature(cause)
+		t.Fatalf("parsePort(%q): %s", s, cause)
+	}
+}
+```
+
+Running it with `Seed(1)` and `MaxFailures(2)` produces:
+
+```text
+[pbt] failure 1 of 2: property failed after 6 passed checks and 9 shrink steps (size 4)
+[pbt] failure was named "accepted invalid port"
+[pbt] s (StringOf(SampledFrom(10 values))) = "0"
+[pbt] error: parsePort("0"): accepted invalid port
+[pbt] reproduce: go test -run 'TestNamedPort' -pbt.seed=0x1 -pbt.failures=2
+[pbt] failure 2 of 2: property failed after 6 passed checks and 90 shrink steps (size 8)
+[pbt] failure was named "rejected valid port"
+[pbt] s (StringOf(SampledFrom(10 values))) = "7000"
+[pbt] error: parsePort("7000"): rejected valid port
+[pbt] reproduce: go test -run 'TestNamedPort' -pbt.seed=0x1 -pbt.failures=2
+```
+
+The name replaces the assertion site, panic type and site, or stateful command check as the failure identity. Shrinking keeps that name, and `MaxFailures` counts different names as different failures. The same identity determines saved-file suffixes when collecting several failures and the replay comparison for `HealthFlaky`.
+
+Choose names for causes, without generated values. Otherwise each value can become a separate failure and prevent shrinking. Without `Signature`, the automatic identity still applies. A call before or after a failure works; the last call wins, including deferred calls and cleanup callbacks. `Conjunction` shares one case, so a signature in any member names the whole case. A passing case ignores the name.
+
 ## When a failure does not recur
 
 Before shrinking, `Check` replays the failing case once with the same choices. A property that depends only on its input fails again, in the same way. The replay can pass, discard the case or fail at another place. Then the property or a generator depends on something besides the choices, such as a clock, a global variable or the order of goroutines. The report then carries a `HealthFlaky` note.

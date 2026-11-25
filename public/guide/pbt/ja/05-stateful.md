@@ -188,6 +188,92 @@ func (q *leakyQueue) Close(id int) error {
 漏れを示す最短のプログラムです。
 失敗は検査の種類とコマンド、つまり「postcondition of open」で区別されるので、縮小が別の失敗にすり替わることはありません。
 
+## 失敗を招いた手を探す
+
+失敗を検出するコマンドは、失敗を招いたコマンドよりずっと後に走ることがあります。
+`Causality(n)` か `-pbt.causality=n` は、最初に失敗したプログラムの継続を、縮小の前に標本として集めます。
+デフォルトのゼロでは、この分析を行いません。
+
+pbtは、標本にした接頭辞ごとに最後のコマンドまでの選択を残し、元のサイズで新しい継続を `n` 個生成します。
+報告には、元の失敗と同じ識別子で失敗した継続の割合が載ります。
+破棄された継続は、この割合に入れません。
+割合が上がっていれば、残した接頭辞の中のコマンドが失敗を起こりやすくしたことを示唆します。
+
+次のプロパティは `write(7)` で値を失い、関係のない4つのコマンドの後の `read()` でその喪失を検出します。
+
+```go
+var delayedWriteProperty = func(t *pbt.T) {
+	step, want, stored := 0, 0, 0
+	init := func() { step, want = 0, 0 }
+	next := func(pbt.Var) { step++ }
+	gen := func() pbt.CommandGen {
+		switch step {
+		case 0:
+			return pbt.Map(pbt.IntRange(0, 15), func(value int) pbt.Command {
+				return pbt.Command{
+					Name: "write", Args: []any{value},
+					Run: func(pbt.Env) any {
+						stored = value
+						if value == 7 {
+							stored = 0 // planted bug: this write loses its value
+						}
+						return nil
+					},
+					Next: func(pbt.Var) { want = value; step++ },
+				}
+			})
+		case 5:
+			return pbt.Just(pbt.Command{
+				Name: "read", Next: next,
+				Run: func(pbt.Env) any { return stored },
+				Post: func(_ pbt.Env, result any) error {
+					if result.(int) != want {
+						return fmt.Errorf("read %d, want %d", result, want)
+					}
+					return nil
+				},
+			})
+		default:
+			return pbt.Just(pbt.Command{Name: "wait", Next: next})
+		}
+	}
+	pbt.Commands(init, gen, pbt.Length(6, 6)).Draw(t, "program").RunSequential(t)
+}
+```
+
+`TestCausalityFindsEarlyWrite` は、これを `Seed(1)` と `Causality(32)` で実行します。
+報告には次の行が含まれます。
+ここではプログラム、履歴、後ろの接頭辞の割合を省いています。
+
+```text
+[pbt] property failed after 38 passed checks and 16 shrink steps (size 39)
+[pbt] error: step 6: postcondition of read() failed: read 0, want 7
+[pbt] reproduce: go test -run 'TestDelayedWrite' -pbt.seed=0x1
+[pbt] causality (32 continuations per prefix, seed 0x1):
+[pbt]   steps are generated commands of the first failing case, before shrinking in this run
+[pbt]   after 0 of 6 steps: 0/32 fail with the same identity
+[pbt]   after 1 of 6 steps: 32/32 fail with the same identity <- largest measured rise at step 1: write(7)
+```
+
+事後条件が失敗するのは6手目ですが、最初のコマンドを残すと、標本にしたすべての継続が失敗します。
+この例では、`Length(6, 6)` によって、縮小の間も検出が遅れる形を保っています。
+長さが変わるプログラムでは、縮小がコマンドを取り除き、手の番号が変わることがあります。
+因果分析の報告が指すのは、その縮小の前の、最初に失敗したプログラムです。
+
+分析の手間は、縮小の前に失敗を確かめる通常の再実行に加えて、プロパティの実行が最大で `16*n` 回です。
+間隔を空けて最大8つの接頭辞を標本にし、測った中で最も大きな上昇を最大8回まで二分します。
+これらの実行でもセットアップとクリーンアップが走るので、プロパティを呼ぶたびにシステムをリセットしてください。
+チェック数や統計には数えず、`OnFail` も呼ばず、ケースも保存しません。
+
+この分析の対象は、`fsm.Commands` を含む逐次の `Commands` のプログラムです。
+並行プログラムは、生成の順序が実行の順序と一致しないので飛ばします。
+縮小の前の確認の再実行で再現しない失敗も飛ばします。
+`MaxFailures` では最初の失敗だけを分析し、`CheckExists` はこのオプションを無視します。
+保存したケースでは、元の縮小前のプログラムが残っていないので、再実行したプログラムを分析します。
+
+上昇が示すのは原因の候補であって、証明ではありません。
+標本のばらつきで上昇が隠れることも、割合がまた下がることもあり、長い列では候補の手を範囲までしか絞れないこともあります。
+
 ## 良いモデルの書き方
 
 モデルを変更するのは `init` と `Next` だけにしてください。

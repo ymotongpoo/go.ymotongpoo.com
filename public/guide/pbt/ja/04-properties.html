@@ -52,7 +52,7 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 <div class="layout">
 <nav class="side">
 <h1><a href="./">pbt 利用ガイド</a></h1>
-<div class="version">pbt v0.4.0</div>
+<div class="version">pbt v0.5.0</div>
 <ol>
 <li><a href="./">はじめに</a></li>
 <li><a href="01-generators">生成器</a></li>
@@ -66,15 +66,16 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 <li><a href="09-types">型から導く生成器</a></li>
 <li><a href="10-formats">規格が定める形式</a></li>
 <li><a href="11-reference">次に読むもの</a></li>
+<li><a href="12-agents">エージェントでプロジェクトをテストする</a></li>
 </ol>
 <div class="lang"><a href="../04-properties">English</a></div>
 <div class="lang"><a href="https://pkg.go.dev/go.ymotongpoo.com/pbt">pkg.go.dev</a> · <a href="https://github.com/ymotongpoo/pbt">GitHub</a></div>
 <div class="lang"><a href="04-properties.md">Markdown</a> · <a href="/pbt/llms.txt">llms.txt</a></div>
 </nav>
 <main>
-<h1 id="heading">プロパティと実行</h1>
+<h1 id="プロパティと実行">プロパティと実行</h1>
 <p>実行の形を決める要素を扱います。ケースの数、サイズ、破棄したケースの扱い、ケースの前後に動くもの、プロパティの組み合わせ、失敗の再現です。</p>
-<h2 id="heading-1">オプションとフラグ</h2>
+<h2 id="オプションとフラグ">オプションとフラグ</h2>
 <p>ほとんどの設定に、<code>go test</code> の実行全体に有効なフラグと、1回の <code>Check</code> に有効なオプションがあります。オプションがフラグより優先されます。ただしヘルスチェックは例外で、フラグとオプションの指定が足し合わされます。</p>
 <table>
 <thead>
@@ -105,6 +106,12 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 <td>最初のケースのサイズと、増加の上限</td>
 </tr>
 <tr>
+<td><code>-pbt.budget</code></td>
+<td><code>Budget(d)</code></td>
+<td>0（無制限）</td>
+<td>探索に使える経過時間。再実行と縮小は含まない</td>
+</tr>
+<tr>
 <td><code>-pbt.shrinktime</code></td>
 <td><code>ShrinkTime(d)</code></td>
 <td>30s</td>
@@ -115,6 +122,30 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 <td><code>MaxFailures(n)</code></td>
 <td>1</td>
 <td>集めて縮小し報告する、種類の異なる失敗の数</td>
+</tr>
+<tr>
+<td><code>-pbt.causality</code></td>
+<td><code>Causality(n)</code></td>
+<td>0（無効）</td>
+<td>逐次のプログラムで原因の候補を探すときの、接頭辞ごとの継続の数（5章）</td>
+</tr>
+<tr>
+<td><code>-pbt.coverage</code></td>
+<td><code>CoverageGuided()</code></td>
+<td>false</td>
+<td>実行中のブロック単位のカバレッジで探索を導く（8章）</td>
+</tr>
+<tr>
+<td><code>-pbt.json</code></td>
+<td><code>ReportJSON(path)</code></td>
+<td>空（無効）</td>
+<td>実行ごとに1行のJSONの報告を追記する</td>
+</tr>
+<tr>
+<td><code>-pbt.observe</code></td>
+<td><code>Observations(dir)</code></td>
+<td>空（無効）</td>
+<td>OpenPBTStatsの記録をテストごとに1ファイルへ追記する</td>
 </tr>
 <tr>
 <td><code>-pbt.searchsteps</code></td>
@@ -165,6 +196,12 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 <td>不足か未決の <code>Cover</code> 要求で失敗</td>
 </tr>
 <tr>
+<td><code>-pbt.warnhealth</code></td>
+<td><code>WarnHealth(checks...)</code></td>
+<td>なし</td>
+<td>オプションのヘルスチェックを警告として有効にする。今は <code>HealthDuplicate</code> だけ</td>
+</tr>
+<tr>
 <td><code>-pbt.checkhealth</code></td>
 <td><code>CheckHealth(checks...)</code></td>
 <td>なし</td>
@@ -207,7 +244,15 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 </span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#1f2328">}</span><span style="color:#fff">
 </span></span></span><span style="display:flex;"><span><span style="color:#1f2328">})</span><span style="color:#fff">
 </span></span></span></code></pre><p><code>MakeCheck</code> はプロパティを <code>func(*testing.T)</code> に包みます。プロパティの表やサブテストに向いています。</p>
-<h2 id="heading-2">ケースを破棄する</h2>
+<h2 id="時間予算">時間予算</h2>
+<p><code>Budget(d)</code> か <code>-pbt.budget=d</code> は、探索に使える経過時間を制限します。デフォルトのゼロは、時間による制限をかけません。時計は保存したケースの再実行の後に動き始めます。pbtは新しいケースの前に毎回時間を確かめます。破棄したケース、標的型探索のステップ、<code>CheckCoverage</code> が延長した実行も対象です。</p>
+<p>ケースの数の上限はそのまま有効なので、<code>Budget</code> は最低限の実行時間を約束しません。指定した時間ほど走らせたいときは <code>Checks</code> を大きくしてください。<code>Maximize</code> か <code>Minimize</code> を呼ぶプロパティでは、かわりに <code>SearchSteps</code> を大きくします。</p>
+<pre style="background-color:#f7f7f7;-webkit-text-size-adjust:none;"><code><span style="display:flex;"><span>go <span style="color:#6639ba">test</span> -count<span style="color:#0550ae">=</span><span style="color:#0550ae">1</span> -run <span style="color:#0a3069">&#39;^TestQueue$&#39;</span> -pbt.checks<span style="color:#0550ae">=</span><span style="color:#0550ae">1000000</span> -pbt.budget<span style="color:#0550ae">=</span>30s
+</span></span></code></pre><p>実行中のケースは、予算が尽きても最後まで走ります。止まるおそれのあるプロパティには <code>go test -timeout</code> を使ってください。再実行と縮小はこの予算の外にあり、失敗や証拠ごとの縮小は <code>ShrinkTime</code> が別に制限します。</p>
+<p>時間が尽きると、<code>Check</code> は <code>Checks</code> より少ないケースで通過することがあります。集めた失敗は、そのまま失敗として縮小され、報告に載ります。有効にしたヘルスチェックと <code>CheckCoverage</code> も実行を失敗にでき、未決のカバレッジの要求は失敗のままです。<code>CheckExists</code> は、証拠が見つからなければ失敗します。</p>
+<p>予算を使い切って通過した実行は、<code>Verbose</code> がなくても必ず要約を出します。<code>TestSearchBudget</code> は <code>testing/synctest</code> を使い、1秒かかるケースを3つ、実際には待たずに走らせます。</p>
+<pre style="background-color:#f7f7f7;-webkit-text-size-adjust:none;"><code><span style="display:flex;"><span>[pbt] OK, passed 3 checks in the 3s budget (seed 0x1)
+</span></span></code></pre><h2 id="ケースを破棄する">ケースを破棄する</h2>
 <p><code>t.Assume(cond)</code> は条件が偽のとき現在のケースを破棄します。PropErの <code>?IMPLIES</code> と同じです。破棄したケースは通過にも失敗にも数えず、<code>Check</code> は別のケースを引きます。<code>Skip</code>、<code>Skipf</code>、<code>SkipNow</code> も同じ働きです。そのケースですでに失敗を記録していれば、後から破棄しても失敗は残ります。</p>
 <pre style="background-color:#f7f7f7;-webkit-text-size-adjust:none;"><code><span style="display:flex;"><span><span style="color:#cf222e">func</span><span style="color:#fff"> </span><span style="color:#6639ba">TestDivision</span><span style="color:#1f2328">(</span><span style="color:#1f2328">t</span><span style="color:#fff"> </span><span style="color:#0550ae">*</span><span style="color:#1f2328">testing</span><span style="color:#1f2328">.</span><span style="color:#1f2328">T</span><span style="color:#1f2328">)</span><span style="color:#fff"> </span><span style="color:#1f2328">{</span><span style="color:#fff">
 </span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#6639ba">Check</span><span style="color:#1f2328">(</span><span style="color:#1f2328">t</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#cf222e">func</span><span style="color:#1f2328">(</span><span style="color:#1f2328">t</span><span style="color:#fff"> </span><span style="color:#0550ae">*</span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#1f2328">T</span><span style="color:#1f2328">)</span><span style="color:#fff"> </span><span style="color:#1f2328">{</span><span style="color:#fff">
@@ -220,7 +265,7 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 </span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#1f2328">})</span><span style="color:#fff">
 </span></span></span><span style="display:flex;"><span><span style="color:#1f2328">}</span><span style="color:#fff">
 </span></span></span></code></pre><p>破棄には予算があります。破棄がチェック数の10倍を超えると、最後に破棄した理由を示して実行は失敗します。大半のケースを破棄するプロパティは、主張しているより少ないことしか検査していないからです。<code>Assume(b &gt; 0)</code> より <code>IntMin(1)</code> のように、有効な入力を作る生成器があるならそちらを選んでください。</p>
-<h2 id="heading-3">セットアップとクリーンアップ</h2>
+<h2 id="セットアップとクリーンアップ">セットアップとクリーンアップ</h2>
 <p><code>Setup</code> オプションは各ケースの前に関数を実行します。その関数は後片付けの関数を返してもよく、返した関数はケースの後に実行されます。<code>t.Cleanup</code> はプロパティの中から同じ目的の関数を登録します。クリーンアップは、ケースが失敗したかどうかに関係なく、ケースの後に登録と逆の順序で実行されます。</p>
 <p>あるクリーンアップでパニックや破棄が起きても、残りのクリーンアップは実行されます。プロパティがケースを破棄していても、クリーンアップで失敗すればケースは失敗になります。クリーンアップで破棄しても、プロパティの失敗やパニックは消えません。プロパティとクリーンアップの両方でパニックが起きた場合、報告にはプロパティのパニックが残ります。</p>
 <pre style="background-color:#f7f7f7;-webkit-text-size-adjust:none;"><code><span style="display:flex;"><span><span style="color:#cf222e">func</span><span style="color:#fff"> </span><span style="color:#6639ba">TestFileRoundTrip</span><span style="color:#1f2328">(</span><span style="color:#1f2328">t</span><span style="color:#fff"> </span><span style="color:#0550ae">*</span><span style="color:#1f2328">testing</span><span style="color:#1f2328">.</span><span style="color:#1f2328">T</span><span style="color:#1f2328">)</span><span style="color:#fff"> </span><span style="color:#1f2328">{</span><span style="color:#fff">
@@ -242,7 +287,7 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 </span></span></span><span style="display:flex;"><span><span style="color:#fff">		</span><span style="color:#1f2328">}</span><span style="color:#fff">
 </span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#1f2328">},</span><span style="color:#fff"> </span><span style="color:#1f2328">withFile</span><span style="color:#1f2328">)</span><span style="color:#fff">
 </span></span></span><span style="display:flex;"><span><span style="color:#1f2328">}</span><span style="color:#fff">
-</span></span></span></code></pre><h2 id="heading-4">プロパティを組み合わせる</h2>
+</span></span></span></code></pre><h2 id="プロパティを組み合わせる">プロパティを組み合わせる</h2>
 <p><code>Conjunction</code> は名前付きの複数のプロパティを同じケースで実行し、失敗したものの名前を示します。後続のプロパティがケースを破棄しても、先行するプロパティの失敗は消えません。<code>Deadline</code> は所定の時間より長くかかったケースを失敗にします。</p>
 <pre style="background-color:#f7f7f7;-webkit-text-size-adjust:none;"><code><span style="display:flex;"><span><span style="color:#cf222e">func</span><span style="color:#fff"> </span><span style="color:#6639ba">TestStringProperties</span><span style="color:#1f2328">(</span><span style="color:#1f2328">t</span><span style="color:#fff"> </span><span style="color:#0550ae">*</span><span style="color:#1f2328">testing</span><span style="color:#1f2328">.</span><span style="color:#1f2328">T</span><span style="color:#1f2328">)</span><span style="color:#fff"> </span><span style="color:#1f2328">{</span><span style="color:#fff">
 </span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#57606a">// Conjunction runs every sub-property on the same case and names the</span><span style="color:#fff">
@@ -277,7 +322,7 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 <pre style="background-color:#f7f7f7;-webkit-text-size-adjust:none;"><code><span style="display:flex;"><span>[pbt] error: non-empty: empty
 </span></span><span style="display:flex;"><span>[pbt] error: conjunction: [non-empty] failed
 </span></span></code></pre><p>Goは実行中の関数を中断できないので、<code>Deadline</code> はプロパティが戻った後に経過時間を検査します。戻ってこないプロパティは <code>go test -timeout</code> が捕まえます。<code>Timeout</code> は <code>Deadline</code> の以前の名前で、引き続き使えます。</p>
-<h2 id="heading-5">失敗を説明する</h2>
+<h2 id="失敗を説明する">失敗を説明する</h2>
 <p><code>t.OnFail(f)</code> は、報告されるケースについてだけ、縮小の後に実行される関数を登録します。そこでログに出した内容は報告に載ります。テスト対象のシステムの状態や計算の途中の値を表示する場所で、PropErの <code>?WHENFAIL</code> に当たります。</p>
 <pre style="background-color:#f7f7f7;-webkit-text-size-adjust:none;"><code><span style="display:flex;"><span><span style="color:#cf222e">func</span><span style="color:#fff"> </span><span style="color:#6639ba">TestOnFail</span><span style="color:#1f2328">(</span><span style="color:#1f2328">t</span><span style="color:#fff"> </span><span style="color:#0550ae">*</span><span style="color:#1f2328">testing</span><span style="color:#1f2328">.</span><span style="color:#1f2328">T</span><span style="color:#1f2328">)</span><span style="color:#fff"> </span><span style="color:#1f2328">{</span><span style="color:#fff">
 </span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#6639ba">Check</span><span style="color:#1f2328">(</span><span style="color:#1f2328">t</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#cf222e">func</span><span style="color:#1f2328">(</span><span style="color:#1f2328">t</span><span style="color:#fff"> </span><span style="color:#0550ae">*</span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#1f2328">T</span><span style="color:#1f2328">)</span><span style="color:#fff"> </span><span style="color:#1f2328">{</span><span style="color:#fff">
@@ -292,7 +337,7 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 </span></span></span><span style="display:flex;"><span><span style="color:#fff">		</span><span style="color:#1f2328">}</span><span style="color:#fff">
 </span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#1f2328">})</span><span style="color:#fff">
 </span></span></span><span style="display:flex;"><span><span style="color:#1f2328">}</span><span style="color:#fff">
-</span></span></span></code></pre><h2 id="heading-6">パニック</h2>
+</span></span></span></code></pre><h2 id="パニック">パニック</h2>
 <p>プロパティの中のパニックはケースを失敗にします。報告にはパニックの値と、あなたのコードのフレームが載ります。縮小器は同じ場所でパニックする最小のケースを探します。パニックそのものを扱うプロパティのために、補助の関数が2つあります。</p>
 <pre style="background-color:#f7f7f7;-webkit-text-size-adjust:none;"><code><span style="display:flex;"><span><span style="color:#cf222e">func</span><span style="color:#fff"> </span><span style="color:#6639ba">mustPositive</span><span style="color:#1f2328">(</span><span style="color:#1f2328">n</span><span style="color:#fff"> </span><span style="color:#cf222e">int</span><span style="color:#1f2328">)</span><span style="color:#fff"> </span><span style="color:#cf222e">int</span><span style="color:#fff"> </span><span style="color:#1f2328">{</span><span style="color:#fff">
 </span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#cf222e">if</span><span style="color:#fff"> </span><span style="color:#1f2328">n</span><span style="color:#fff"> </span><span style="color:#0550ae">&lt;=</span><span style="color:#fff"> </span><span style="color:#0550ae">0</span><span style="color:#fff"> </span><span style="color:#1f2328">{</span><span style="color:#fff">
@@ -314,7 +359,7 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 </span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#6639ba">Check</span><span style="color:#1f2328">(</span><span style="color:#1f2328">t</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#6639ba">NoPanic</span><span style="color:#1f2328">(</span><span style="color:#1f2328">strings</span><span style="color:#1f2328">.</span><span style="color:#1f2328">Repeat</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#6639ba">WithType</span><span style="color:#1f2328">(</span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#6639ba">IntRange</span><span style="color:#1f2328">(</span><span style="color:#0550ae">0</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#0550ae">3</span><span style="color:#1f2328">))))</span><span style="color:#fff">
 </span></span></span><span style="display:flex;"><span><span style="color:#1f2328">}</span><span style="color:#fff">
 </span></span></span></code></pre><p><code>Recover</code> は関数を実行し、パニックの値か <code>nil</code> を返すので、不正な入力でパニックすることをプロパティで主張できます。<code>NoPanic</code> は関数を受け取り、その引数を <code>Make</code> で生成します。<code>Make</code> は9章で説明します。<code>WithType</code> と <code>WithField</code> のオプションで引数を絞れます。</p>
-<h2 id="1">1回の実行での複数の失敗</h2>
+<h2 id="1回の実行での複数の失敗">1回の実行での複数の失敗</h2>
 <p>実行は通常、最初の失敗で止まり、それを縮小して報告します。そのため、バグが2つある関数では、バグが1つずつしか見えません。1つ目を直して再び実行して、ようやく2つ目に出会います。<code>MaxFailures(n)</code> か <code>-pbt.failures=n</code> を指定すると、失敗の後も実行を続けます。仕方の異なる失敗を最大 <code>n</code> 件集め、それぞれを縮小し、保存し、報告します。</p>
 <pre style="background-color:#f7f7f7;-webkit-text-size-adjust:none;"><code><span style="display:flex;"><span><span style="color:#cf222e">var</span><span style="color:#fff"> </span><span style="color:#1f2328">portProperty</span><span style="color:#fff"> </span><span style="color:#1f2328">=</span><span style="color:#fff"> </span><span style="color:#cf222e">func</span><span style="color:#1f2328">(</span><span style="color:#1f2328">t</span><span style="color:#fff"> </span><span style="color:#0550ae">*</span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#1f2328">T</span><span style="color:#1f2328">)</span><span style="color:#fff"> </span><span style="color:#1f2328">{</span><span style="color:#fff">
 </span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#1f2328">s</span><span style="color:#fff"> </span><span style="color:#0550ae">:=</span><span style="color:#fff"> </span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#6639ba">StringOf</span><span style="color:#1f2328">(</span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#6639ba">SampledFrom</span><span style="color:#1f2328">([]</span><span style="color:#6639ba">rune</span><span style="color:#1f2328">(</span><span style="color:#0a3069">&#34;0123456789&#34;</span><span style="color:#1f2328">))).</span><span style="color:#6639ba">Draw</span><span style="color:#1f2328">(</span><span style="color:#1f2328">t</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#0a3069">&#34;s&#34;</span><span style="color:#1f2328">)</span><span style="color:#fff">
@@ -334,16 +379,68 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 </span></span><span style="display:flex;"><span>[pbt] s (StringOf(SampledFrom(10 values))) = &#34;7000&#34;
 </span></span><span style="display:flex;"><span>[pbt] error: parsePort(&#34;7000&#34;) rejected a valid port
 </span></span><span style="display:flex;"><span>[pbt] reproduce: go test -run &#39;TestPort&#39; -pbt.seed=0x1 -pbt.failures=2
-</span></span></code></pre><p>失敗した行が違うか、パニックの型か発生位置が違うとき、2つの失敗は異なるものとみなされます。この区別は、3章で縮小を1つのバグにとどめていたものと同じです。縮小器が途中で新しい仕方の失敗に出会えば、それも <code>n</code> 件のうちの1件になります。どの失敗にも、<code>ShrinkTime</code> の時間がそれぞれ丸ごと割り当てられます。2つ目の最小値7000は局所的な最小です。本当の境界は6554ですが、そこへ至るには後ろの桁をより大きな数字にする必要があり、縮小器はそれを試しません。保存した失敗はまとめて再実行され、保存済みのケースが再実行で失敗したときは、それ以上の失敗を探しません。<code>CheckExists</code> はこのオプションを無視します。</p>
-<h2 id="heading-7">シード、保存したケース、再実行</h2>
+</span></span></code></pre><p>デフォルトでは、失敗した行が違うか、パニックの型か発生位置が違うとき、2つの失敗は異なるものとみなされます。この区別は、3章で縮小を1つのバグにとどめていたものと同じです。縮小器が途中で新しい仕方の失敗に出会えば、それも <code>n</code> 件のうちの1件になります。どの失敗にも、<code>ShrinkTime</code> の時間がそれぞれ丸ごと割り当てられます。2つ目の最小値7000は局所的な最小です。本当の境界は6554ですが、そこへ至るには後ろの桁をより大きな数字にする必要があり、縮小器はそれを試しません。保存した失敗はまとめて再実行され、保存済みのケースが再実行で失敗したときは、それ以上の失敗を探しません。<code>CheckExists</code> はこのオプションを無視します。</p>
+<p>いくつかの原因が1つのアサーションを共有するときは、原因ごとに安定した名前を <code>t.Signature</code> に渡してください。すべての失敗が同じ行に届いても、<code>MaxFailures</code> は名前ごとに分けて集めます。<a href="03-shrinking#%E5%A4%B1%E6%95%97%E3%81%AF%E5%90%8C%E3%81%98%E3%82%82%E3%81%AE%E3%81%AB%E4%BF%9D%E3%81%9F%E3%82%8C%E3%82%8B">3章の名前付きのポートの例</a>は、パーサーが受け付けてしまう不正なポートと、拒んでしまう正しいポートを分けています。</p>
+<h2 id="シード保存したケース再実行">シード、保存したケース、再実行</h2>
 <p>すべての報告は、実行のシードを含む <code>reproduce:</code> の行で終わります。そのシードを <code>-pbt.seed</code> に渡すと、プロパティのコードとpbtのバージョンが同じであれば、失敗したケースを含む同じケースの列が繰り返されます。pbtを更新すると、同じシードから生成されるケースが変わることがあります。v0.3.2では整数生成の修正により、一部のシードで生成結果が変わります。v0.4.0では、一部の再帰的な型について <code>Make</code> が生成する値が変わり、縮小器が別の、より小さなケースに到達することがあります。保存済みのケースは、その選択の列を、インストールされているバージョンの生成器に通して再生します。pbtを更新した後は、再帰的な型に <code>Make</code> を使うプロパティの保存済みケースが、別の値を作ることがあります。</p>
-<p>失敗したケースは <code>testdata/pbt/&lt;テスト名&gt;/&lt;ハッシュ&gt;</code> にもテキストファイルとして保存されます。サイズ、コメントとして取り出した値、そして選択の列が入っています。同じテストの以後の <code>Check</code> は、新しいケースを生成する前に保存済みのケースを再実行し、まだ失敗するなら失敗にします。回帰ケースがコードとともにバージョン管理に入るわけです。ケースを捨てるにはファイルを削除します。この挙動を調整するオプションが3つあります。<code>NoSave</code> は実行に書き込みをさせません。<code>NoReplay</code> は保存済みケースを飛ばします。<code>ReplayFile</code> またはフラグ <code>-pbt.replay=FILE</code> は、どのテストでも保存済みファイルを1つ再実行します。あるテストのケースを別のテストに渡すときや、CIのログにある失敗を手元で再現するときに使います。</p>
+<p>失敗したケースは <code>testdata/pbt/&lt;テスト名&gt;/&lt;ハッシュ&gt;</code> にもテキストファイルとして保存されます。サイズ、コメントとして取り出した値、そして選択の列が入っています。同じテストの以後の <code>Check</code> は、新しいケースを生成する前に保存済みのケースを再実行し、まだ失敗するなら失敗にします。回帰ケースがコードとともにバージョン管理に入るわけです。バグを直した後も、このファイルは回帰テストのケースとして残してください。削除すればその再実行はなくなりますが、実行を通すためだけに削除しないでください。この挙動を調整するオプションが3つあります。<code>NoSave</code> は実行に書き込みをさせません。<code>NoReplay</code> は保存済みケースを飛ばします。<code>ReplayFile</code> またはフラグ <code>-pbt.replay=FILE</code> は、どのテストでも保存済みファイルを1つ再実行します。あるテストのケースを別のテストに渡すときや、CIのログにある失敗を手元で再現するときに使います。</p>
+<p><code>HealthStale</code> は、保存した取り出しのコメントが今の再実行の取り出しと異なるとき、デフォルトで警告します。生成器が変わると、同じ選択が別の入力になることがあります。警告にある保存時の文字列と今の文字列を比べ、元の値をまだ試す必要があるなら、その値を明示的にテストしてください。陳腐化したケースの再実行が通過しても、元の回帰が直ったことの証明にはなりません。</p>
+<p>比較は文字列として描画した値で行い、値の深い比較は行いません。切り詰めで変化が隠れることがあり、ポインターや独自の書式のように描画が安定しない取り出しは比較しません。<code>CheckHealth(HealthStale)</code> か <code>-pbt.checkhealth=stale</code> を付けると、この警告で通過した実行を失敗にします。<code>IgnoreHealth(HealthStale)</code> は警告を隠します。再実行は保存したコメントを書き換えません。</p>
+<h2 id="機械可読の出力">機械可読の出力</h2>
+<p><code>ReportJSON(path)</code> か <code>-pbt.json=path</code> は、<code>Check</code> か <code>CheckExists</code> のたびにJSONを1行追記します。デフォルトの空のパスでは出力しません。親ディレクトリは先に作っておいてください。スキーマの名前は <code>go.ymotongpoo.com/pbt/report/v1</code> で、読む側は知らないフィールドを無視してください。</p>
+<table>
+<thead>
+<tr>
+<th>フィールド</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>test</code>、<code>seed</code>、<code>kind</code>、<code>status</code>、<code>errors</code></td>
+<td>テスト名、16進数のシード、<code>check</code> か <code>exists</code>、結果、エラーメッセージ</td>
+</tr>
+<tr>
+<td><code>checks_passed</code>、<code>rejected</code>、<code>discards</code></td>
+<td>探索の件数。再実行と縮小は含まない。<code>rejected</code> は失敗した候補の数</td>
+</tr>
+<tr>
+<td><code>budget_exhausted</code>、<code>durations_seconds</code></td>
+<td>時間で探索が終わったか。全体、探索、縮小の所要時間</td>
+</tr>
+<tr>
+<td><code>failures</code>、<code>witness</code></td>
+<td>失敗の識別子、描画した取り出し、保存先のパス、再現のコマンド。<code>witness</code> は <code>CheckExists</code> が成功したときだけ</td>
+</tr>
+<tr>
+<td><code>health</code>、<code>statistics</code>、<code>objectives</code></td>
+<td>診断、ラベル、カバレッジの要求、測定値、最良の効用</td>
+</tr>
+</tbody>
+</table>
+<p><code>status</code> は <code>passed</code>、<code>failed</code>、<code>gave_up</code>、<code>no_witness</code>、<code>error</code> のどれかです。取り出しの値は描画した文字列で、<code>ReportLimit</code> と <code>ReportDepth</code> に従います。有限でない数は、文字列の <code>NaN</code>、<code>+Inf</code>、<code>-Inf</code> で表します。</p>
+<pre style="background-color:#f7f7f7;-webkit-text-size-adjust:none;"><code><span style="display:flex;"><span><span style="color:#cf222e">func</span><span style="color:#fff"> </span><span style="color:#6639ba">checkRecordedRun</span><span style="color:#1f2328">(</span><span style="color:#1f2328">tb</span><span style="color:#fff"> </span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#1f2328">TB</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#1f2328">reportPath</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#1f2328">observationDir</span><span style="color:#fff"> </span><span style="color:#cf222e">string</span><span style="color:#1f2328">)</span><span style="color:#fff"> </span><span style="color:#1f2328">{</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#6639ba">Check</span><span style="color:#1f2328">(</span><span style="color:#1f2328">tb</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#cf222e">func</span><span style="color:#1f2328">(</span><span style="color:#1f2328">t</span><span style="color:#fff"> </span><span style="color:#0550ae">*</span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#1f2328">T</span><span style="color:#1f2328">)</span><span style="color:#fff"> </span><span style="color:#1f2328">{</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">		</span><span style="color:#1f2328">n</span><span style="color:#fff"> </span><span style="color:#0550ae">:=</span><span style="color:#fff"> </span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#6639ba">IntRange</span><span style="color:#1f2328">(</span><span style="color:#0550ae">0</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#0550ae">9</span><span style="color:#1f2328">).</span><span style="color:#6639ba">Draw</span><span style="color:#1f2328">(</span><span style="color:#1f2328">t</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#0a3069">&#34;n&#34;</span><span style="color:#1f2328">)</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">		</span><span style="color:#1f2328">t</span><span style="color:#1f2328">.</span><span style="color:#6639ba">Classify</span><span style="color:#1f2328">(</span><span style="color:#1f2328">n</span><span style="color:#0550ae">%</span><span style="color:#0550ae">2</span><span style="color:#fff"> </span><span style="color:#0550ae">==</span><span style="color:#fff"> </span><span style="color:#0550ae">0</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#0a3069">&#34;even&#34;</span><span style="color:#1f2328">)</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">		</span><span style="color:#cf222e">if</span><span style="color:#fff"> </span><span style="color:#1f2328">n</span><span style="color:#fff"> </span><span style="color:#1f2328">&lt;</span><span style="color:#fff"> </span><span style="color:#0550ae">0</span><span style="color:#fff"> </span><span style="color:#0550ae">||</span><span style="color:#fff"> </span><span style="color:#1f2328">n</span><span style="color:#fff"> </span><span style="color:#1f2328">&gt;</span><span style="color:#fff"> </span><span style="color:#0550ae">9</span><span style="color:#fff"> </span><span style="color:#1f2328">{</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">			</span><span style="color:#1f2328">t</span><span style="color:#1f2328">.</span><span style="color:#6639ba">Fatalf</span><span style="color:#1f2328">(</span><span style="color:#0a3069">&#34;out of range: %d&#34;</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#1f2328">n</span><span style="color:#1f2328">)</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">		</span><span style="color:#1f2328">}</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#1f2328">},</span><span style="color:#fff"> </span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#6639ba">Seed</span><span style="color:#1f2328">(</span><span style="color:#0550ae">1</span><span style="color:#1f2328">),</span><span style="color:#fff"> </span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#6639ba">Checks</span><span style="color:#1f2328">(</span><span style="color:#0550ae">3</span><span style="color:#1f2328">),</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">		</span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#6639ba">ReportJSON</span><span style="color:#1f2328">(</span><span style="color:#1f2328">reportPath</span><span style="color:#1f2328">),</span><span style="color:#fff"> </span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#6639ba">Observations</span><span style="color:#1f2328">(</span><span style="color:#1f2328">observationDir</span><span style="color:#1f2328">))</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#1f2328">}</span><span style="color:#fff">
+</span></span></span></code></pre><p><code>TestMachineReadableOutput</code> は両方のファイルを確かめます。次はそのJSONの報告から、所要時間、統計、空のコレクションを省いたものです。載せたフィールドの値は、取得したままです。</p>
+<pre style="background-color:#f7f7f7;-webkit-text-size-adjust:none;"><code><span style="display:flex;"><span><span style="color:#1f2328">{</span><span style="color:#0550ae">&#34;schema&#34;</span><span style="color:#1f2328">:</span><span style="color:#0a3069">&#34;go.ymotongpoo.com/pbt/report/v1&#34;</span><span style="color:#1f2328">,</span><span style="color:#0550ae">&#34;test&#34;</span><span style="color:#1f2328">:</span><span style="color:#0a3069">&#34;TestRecordedRun&#34;</span><span style="color:#1f2328">,</span><span style="color:#0550ae">&#34;seed&#34;</span><span style="color:#1f2328">:</span><span style="color:#0a3069">&#34;0x1&#34;</span><span style="color:#1f2328">,</span><span style="color:#0550ae">&#34;kind&#34;</span><span style="color:#1f2328">:</span><span style="color:#0a3069">&#34;check&#34;</span><span style="color:#1f2328">,</span><span style="color:#0550ae">&#34;status&#34;</span><span style="color:#1f2328">:</span><span style="color:#0a3069">&#34;passed&#34;</span><span style="color:#1f2328">,</span><span style="color:#0550ae">&#34;checks_passed&#34;</span><span style="color:#1f2328">:</span><span style="color:#0550ae">3</span><span style="color:#1f2328">,</span><span style="color:#0550ae">&#34;rejected&#34;</span><span style="color:#1f2328">:</span><span style="color:#0550ae">0</span><span style="color:#1f2328">,</span><span style="color:#0550ae">&#34;discards&#34;</span><span style="color:#1f2328">:</span><span style="color:#0550ae">0</span><span style="color:#1f2328">,</span><span style="color:#0550ae">&#34;budget_exhausted&#34;</span><span style="color:#1f2328">:</span><span style="color:#cf222e">false</span><span style="color:#1f2328">}</span>
+</span></span></code></pre><p><code>Observations(dir)</code> か <code>-pbt.observe=dir</code> は、Tycheが読むOpenPBTStatsの記録を追記します。デフォルトの空のディレクトリでは記録しません。pbtはディレクトリを作り、<code>observations/TestRecordedRun.jsonl</code> のように、整えたテスト名ごとに1ファイルを書きます。サブテストの名前はサブディレクトリになります。整えた名前は衝突することがあり、同じファイルに入った記録は <code>property</code> と <code>run_start</code> で区別します。</p>
+<p><code>test_case</code> の記録には、入力、結果、生成の段階、特徴量、所要時間が入ります。特徴量には、ラベル、測定値、カバレッジの要求に当たったかどうか、標的の効用が入ります。所要時間は、入力の生成とテストの実行を分けて記録します。再実行と縮小の試行も記録になります。<code>metadata.final=true</code> の付いた <code>minimal</code> の記録はスナップショットで、もう一度実行したものではありません。実行の最後には <code>info</code> の記録が入ります。<code>coverage</code> のフィールドは、<code>CoverageGuided</code> を使っても今は <code>null</code> です。</p>
+<pre style="background-color:#f7f7f7;-webkit-text-size-adjust:none;"><code><span style="display:flex;"><span>go <span style="color:#6639ba">test</span> -count<span style="color:#0550ae">=</span><span style="color:#0550ae">1</span> ./... -pbt.json<span style="color:#0550ae">=</span>runs.jsonl -pbt.observe<span style="color:#0550ae">=</span>observations
+</span></span></code></pre><p>ログの転送エージェントでこれらのファイルを読み、記録や集計した件数をログやメトリクスのバックエンドへ送れます。pbtはファイルを手元に書くだけで、ネットワークには送りません。観測記録はバッファーにためて実行の最後に書き出すので、異常終了するとバッファーの中の記録が失われることがあります。書き込みに失敗するとテストは失敗します。求められた出力を届けられなかったからです。</p>
 
 <div class="pager">
 <span>← <a href="03-shrinking">縮小</a></span>
 <span><a href="05-stateful">ステートフルテスト</a> →</span>
 </div>
-<footer>pbt 利用ガイド for pbt v0.4.0 · <a href="https://github.com/ymotongpoo/pbt/tree/main/docs/guide">source</a> · Apache License 2.0</footer>
+<footer>pbt 利用ガイド for pbt v0.5.0 · <a href="https://github.com/ymotongpoo/pbt/tree/main/docs/guide">source</a> · Apache License 2.0</footer>
 </main>
 </div>
 </body>

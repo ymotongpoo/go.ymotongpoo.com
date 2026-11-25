@@ -52,7 +52,7 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 <div class="layout">
 <nav class="side">
 <h1><a href="./">pbt user guide</a></h1>
-<div class="version">pbt v0.4.0</div>
+<div class="version">pbt v0.5.0</div>
 <ol>
 <li><a href="./">Getting started</a></li>
 <li><a href="01-generators">Generators</a></li>
@@ -66,6 +66,7 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 <li><a href="09-types">Generators from types</a></li>
 <li><a href="10-formats">Standard formats</a></li>
 <li><a href="11-reference">Where to go next</a></li>
+<li><a href="12-agents">Testing a project with an agent</a></li>
 </ol>
 <div class="lang"><a href="ja/02-distribution">日本語</a></div>
 <div class="lang"><a href="https://pkg.go.dev/go.ymotongpoo.com/pbt">pkg.go.dev</a> · <a href="https://github.com/ymotongpoo/pbt">GitHub</a></div>
@@ -149,7 +150,7 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 </span></span><span style="display:flex;"><span>[pbt]   round hundred: 17.6% of 125 cases, required 30.0%
 </span></span></code></pre><p>The run stopped after 125 cases, once the interval excluded 30%. The observed share also says something about <code>IntRange</code>: 0 is a boundary value, so it occurs far more often than one case in a thousand. Statistics are how you find that out, and <code>Frequency</code> or <code>SampledFrom</code> are how you change it when a uniform spread is what the property needs.</p>
 <h2 id="health-checks">Health checks</h2>
-<p>Statistics answer the questions you ask. Health checks answer the ones you might not think of: whether the run spends its cases well. <code>Check</code> watches every run and warns about three problems with the input.</p>
+<p>Statistics answer the questions you ask. Health checks answer the ones you might not think of: whether the run spends its cases well. <code>Check</code> watches every run and warns about wasted input, expensive generation and changes to saved inputs. An optional check also detects repeated choices.</p>
 <table>
 <thead>
 <tr>
@@ -170,6 +171,14 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 <td><code>HealthSlow</code></td>
 <td>drawing the values takes 10 ms per case and a second in all, not counting the property's own work</td>
 </tr>
+<tr>
+<td><code>HealthStale</code></td>
+<td>a saved case's draw comments differ from the draws produced by replay; warns by default</td>
+</tr>
+<tr>
+<td><code>HealthDuplicate</code></td>
+<td>fewer than half the inputs have distinct choice sequences over at least 20 non-discarded random cases; off by default</td>
+</tr>
 </tbody>
 </table>
 <p>A property that keeps only long strings shows the first one.</p>
@@ -184,13 +193,26 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 </span></span></span><span style="display:flex;"><span><span style="color:#1f2328">}</span><span style="color:#fff">
 </span></span></span></code></pre><pre style="background-color:#f7f7f7;-webkit-text-size-adjust:none;"><code><span style="display:flex;"><span>[pbt] health: HealthFilter: 629 of 729 cases were discarded; most by Assume at health_test.go:18 (629) (CheckHealth(HealthFilter) makes this fail; IgnoreHealth(HealthFilter) hides it)
 </span></span></code></pre><p>The run passed, but it ran 729 cases to get its 100, and the warning names the line that threw the rest away. A generator that builds long strings, <code>StringN(8, 40)</code>, removes the waste. The warning names the busiest sources: the description of a <code>Filter</code>, or the line of an <code>Assume</code> or a <code>Skip</code>. <code>HealthLarge</code> names the draws that consumed the most choices.</p>
-<p>Health checks warn by default, the way <code>Cover</code> does, and the run passes. <code>CheckHealth()</code> makes <code>HealthFilter</code> and <code>HealthLarge</code> fail a passing run. <code>CheckHealth(HealthSlow)</code> adds the timing check, which is left out by default because a loaded CI machine can trip it. <code>IgnoreHealth(checks...)</code> hides a check and wins over <code>CheckHealth</code>. The flags <code>-pbt.checkhealth</code> and <code>-pbt.ignorehealth</code> take the same names for every <code>Check</code> of a <code>go test</code> run, for example <code>-pbt.checkhealth=default,slow</code>. Two more checks, <code>HealthFlaky</code> and <code>HealthShrink</code>, apply to failing runs; chapter 3 describes them.</p>
+<p>All health checks except <code>HealthDuplicate</code> warn by default, the way <code>Cover</code> does, and the run passes. <code>CheckHealth()</code> makes <code>HealthFilter</code> and <code>HealthLarge</code> fail a passing run. <code>CheckHealth(HealthSlow)</code> adds the timing check, which is left out by default because a loaded CI machine can trip it. <code>CheckHealth(HealthStale)</code> makes stale replay fail a passing run; <code>CheckHealth()</code> leaves it as a warning because generators can change intentionally. <code>IgnoreHealth(checks...)</code> hides a check and wins over both <code>CheckHealth</code> and <code>WarnHealth</code>.</p>
+<p>The flags <code>-pbt.checkhealth</code> and <code>-pbt.ignorehealth</code> take the same names for every <code>Check</code> of a <code>go test</code> run, for example <code>-pbt.checkhealth=default,slow</code>. Two more checks, <code>HealthFlaky</code> and <code>HealthShrink</code>, apply to failing runs; chapter 3 describes them.</p>
+<p><code>HealthStale</code> means that the same saved choices now describe different draw text. It does not mean that a fixed bug still fails. The warning identifies the file and the first changed draw. <a href="04-properties#seeds-saved-cases-and-replay">Chapter 4</a> explains what to inspect before trusting the replay.</p>
+<p><code>WarnHealth(HealthDuplicate)</code> or <code>-pbt.warnhealth=duplicate</code> enables the duplicate warning. <code>CheckHealth(HealthDuplicate)</code> enables it as an error. <code>WarnHealth()</code> with no arguments changes nothing. Health flags and options add up; <code>WarnHealth</code> cannot downgrade a check that <code>CheckHealth</code> makes an error.</p>
+<pre style="background-color:#f7f7f7;-webkit-text-size-adjust:none;"><code><span style="display:flex;"><span><span style="color:#cf222e">func</span><span style="color:#fff"> </span><span style="color:#6639ba">checkSwitch</span><span style="color:#1f2328">(</span><span style="color:#1f2328">tb</span><span style="color:#fff"> </span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#1f2328">TB</span><span style="color:#1f2328">)</span><span style="color:#fff"> </span><span style="color:#1f2328">{</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#6639ba">Check</span><span style="color:#1f2328">(</span><span style="color:#1f2328">tb</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#cf222e">func</span><span style="color:#1f2328">(</span><span style="color:#1f2328">t</span><span style="color:#fff"> </span><span style="color:#0550ae">*</span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#1f2328">T</span><span style="color:#1f2328">)</span><span style="color:#fff"> </span><span style="color:#1f2328">{</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">		</span><span style="color:#1f2328">enabled</span><span style="color:#fff"> </span><span style="color:#0550ae">:=</span><span style="color:#fff"> </span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#6639ba">Bool</span><span style="color:#1f2328">().</span><span style="color:#6639ba">Draw</span><span style="color:#1f2328">(</span><span style="color:#1f2328">t</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#0a3069">&#34;enabled&#34;</span><span style="color:#1f2328">)</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">		</span><span style="color:#1f2328">t</span><span style="color:#1f2328">.</span><span style="color:#6639ba">Classify</span><span style="color:#1f2328">(</span><span style="color:#1f2328">enabled</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#0a3069">&#34;enabled&#34;</span><span style="color:#1f2328">)</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#1f2328">},</span><span style="color:#fff"> </span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#6639ba">Seed</span><span style="color:#1f2328">(</span><span style="color:#0550ae">1</span><span style="color:#1f2328">),</span><span style="color:#fff"> </span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#6639ba">Checks</span><span style="color:#1f2328">(</span><span style="color:#0550ae">20</span><span style="color:#1f2328">),</span><span style="color:#fff"> </span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#6639ba">WarnHealth</span><span style="color:#1f2328">(</span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#1f2328">HealthDuplicate</span><span style="color:#1f2328">))</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#1f2328">}</span><span style="color:#fff">
+</span></span></span></code></pre><p>The Boolean domain has only two values. This run intentionally repeats them:</p>
+<pre style="background-color:#f7f7f7;-webkit-text-size-adjust:none;"><code><span style="display:flex;"><span>[pbt] health: HealthDuplicate: only 2 of 20 generated inputs were distinct by their choices; possible causes include a small domain such as Bool or SampledFrom, a low maximum size, or more Checks than the input space has values (CheckHealth(HealthDuplicate) makes this fail; IgnoreHealth(HealthDuplicate) hides it)
+</span></span></code></pre><p><code>HealthDuplicate</code> counts passing and failing cases from ordinary random generation. It excludes discards, saved-case replay, shrinking and targeted search. Coverage-guided mutations also do not count. The key hashes the consumed choices, without the size. Sizes grow during a run, so including size would hide repeated choices in most early cases.</p>
+<p>This count is a proxy for distinct values. Different choices can map to the same value, and values derived only from size can count as duplicates. Tracking stops after more than 4096 distinct keys. A small domain can be intentional, which is why this check needs an explicit option.</p>
 
 <div class="pager">
 <span>← <a href="01-generators">Generators</a></span>
 <span><a href="03-shrinking">Shrinking</a> →</span>
 </div>
-<footer>pbt user guide for pbt v0.4.0 · <a href="https://github.com/ymotongpoo/pbt/tree/main/docs/guide">source</a> · Apache License 2.0</footer>
+<footer>pbt user guide for pbt v0.5.0 · <a href="https://github.com/ymotongpoo/pbt/tree/main/docs/guide">source</a> · Apache License 2.0</footer>
 </main>
 </div>
 </body>

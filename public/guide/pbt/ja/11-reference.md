@@ -32,10 +32,10 @@
 | パッケージ | 対象 | 見せること |
 | --- | --- | --- |
 | `httpapi` | `httptest` で動かす、楽観的並行制御つきのREST API | サーバーが採番したIDを `Var` で持つこと、ステータスコードを事後条件にすること、ロックの外でIDを採番するサーバーに対する並行実行 |
-| `jobqueue` | リース、可視性タイムアウト、デッドレターを持つワーカーキュー | コマンドで進める擬似時計、失効したリースをモデルに残すこと、リースを確かめないack |
-| `ratelimit` | クライアントごとのスライディングウィンドウ制限 | 「どの窓でもN件まで」という規則そのものをモデルにすること、クライアントを早く忘れすぎる掃除 |
+| `jobqueue` | リース、可視性タイムアウト、デッドレターを持つワーカーキュー | コマンドで進める擬似時計、失効したリースをモデルに残すこと、リースを確かめないack、2つのワーカーの間の引き継ぎに対する `Causality` |
+| `ratelimit` | クライアントごとのスライディングウィンドウ制限 | 「どの窓でもN件まで」という規則そのものをモデルにすること、クライアントを早く忘れすぎる掃除、時間予算付きの実行が書いた `ReportJSON` と `Observations` のファイルをCIのジョブと同じようにテストで読むこと |
 | `sessions` | 失効、更新、ログアウトのあるセッションストア | 状態データと時計を伴う `fsm` パッケージ、行き先で分けた時間経過の遷移 |
-| `ledger` | 口座間の送金 | 結果を予測するモデルと不変条件だけを確かめる監査の併用、並行実行で捕まえる残高超過の競合 |
+| `ledger` | 口座間の送金 | 結果を予測するモデルと不変条件だけを確かめる監査の併用、並行実行で捕まえる残高超過の競合、監査の2つの原因を分けて報告する `Signature` と `MaxFailures` |
 
 `examples` の中で `go test -v -run Caught ./practical/...` を実行すると、仕込んだバグの報告を読めます。
 例題に共通する書き方は、このディレクトリのREADMEに書いてあります。
@@ -76,11 +76,17 @@ go test ./... -pbt.checks=1000          # ケース数を増やす
 go test ./... -pbt.seed=0x1c3           # 実行を繰り返す
 go test ./... -pbt.startsize=10 -pbt.maxsize=100
 go test ./... -pbt.shrinktime=2m
+go test ./... -pbt.checks=1000000 -pbt.budget=30s # 時間で区切った探索
 go test ./... -pbt.searchsteps=5000     # 標的型探索を長くする
 go test ./... -pbt.failures=3           # 種類の異なる失敗を3件まで集める
+go test ./... -pbt.causality=32         # 逐次の接頭辞ごとの継続の数
+go test ./... -pbt.warnhealth=duplicate # 選択の重複を警告する
 go test ./... -pbt.checkhealth=default  # 無駄な入力や大きすぎる入力で失敗にする
 go test ./... -pbt.ignorehealth=slow    # 時間の警告を隠す
 go test ./... -pbt.nosave               # testdata/pbt に書き込まない
 go test ./... -pbt.replay=testdata/pbt/TestQueue/3f2a… -run TestQueue
 go test ./... -pbt.v                    # 要約と縮小のステップを表示する
+go test ./... -pbt.json=runs.jsonl       # 実行ごとに1行のJSON
+go test ./... -pbt.observe=observations  # Tycheが読むOpenPBTStatsのファイル
+go test -cover -coverpkg=./... ./... -pbt.coverage # 実行中のブロック単位のカバレッジで導く
 ```

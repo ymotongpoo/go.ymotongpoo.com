@@ -52,7 +52,7 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 <div class="layout">
 <nav class="side">
 <h1><a href="./">pbt 利用ガイド</a></h1>
-<div class="version">pbt v0.4.0</div>
+<div class="version">pbt v0.5.0</div>
 <ol>
 <li><a href="./">はじめに</a></li>
 <li><a href="01-generators">生成器</a></li>
@@ -66,14 +66,15 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 <li><a href="09-types">型から導く生成器</a></li>
 <li><a href="10-formats">規格が定める形式</a></li>
 <li class="current"><a href="11-reference">次に読むもの</a></li>
+<li><a href="12-agents">エージェントでプロジェクトをテストする</a></li>
 </ol>
 <div class="lang"><a href="../11-reference">English</a></div>
 <div class="lang"><a href="https://pkg.go.dev/go.ymotongpoo.com/pbt">pkg.go.dev</a> · <a href="https://github.com/ymotongpoo/pbt">GitHub</a></div>
 <div class="lang"><a href="11-reference.md">Markdown</a> · <a href="/pbt/llms.txt">llms.txt</a></div>
 </nav>
 <main>
-<h1 id="heading">次に読むもの</h1>
-<h2 id="heading-1">例題の移植</h2>
+<h1 id="次に読むもの">次に読むもの</h1>
+<h2 id="例題の移植">例題の移植</h2>
 <p>リポジトリの <code>examples</code> モジュールには、Fred Hebertの『<a href="https://propertesting.com/">PropEr Testing</a>』の全章をGoに移植したものがあります。この本は、pbtの背後にある考え方を学ぶのに最も良い長編の入門書で、移植はErlangの各例題がGoでどう読めるかを示しています。書籍版は『Property-Based Testing with PropEr, Erlang, and Elixir』として刊行されており、その日本語訳が拙訳『<a href="https://www.lambdanote.com/products/proper">実践プロパティベーステスト ― PropErとErlang/Elixirではじめよう</a>』（Fred Hebert著、ラムダノート、2023年）です。ウェブ版は書籍になる前の草稿で、章の切り方が違い、標的型プロパティの章がありません。表には両方の章番号を載せました。日本語版の8章「標的型プロパティ」に対応する機能は、本ガイドの8章で扱っています。</p>
 <table>
 <thead>
@@ -136,7 +137,7 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 </tbody>
 </table>
 <p>各パッケージのREADMEに、その章の演習への解答があります。<code>examples</code> の中で <code>go test ./...</code> を実行してください。</p>
-<h2 id="heading-2">実践的な例題</h2>
+<h2 id="実践的な例題">実践的な例題</h2>
 <p><code>examples/practical</code> には、小さいながら現実的なシステムを、プロジェクトでテストするのと同じやり方で検査する例題があります。公開APIを通して操作し、結果をモデルと比べ、仕込んだバグの報告をテストで確かめています。5章から7章の内容を前提にしています。</p>
 <table>
 <thead>
@@ -155,12 +156,12 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 <tr>
 <td><code>jobqueue</code></td>
 <td>リース、可視性タイムアウト、デッドレターを持つワーカーキュー</td>
-<td>コマンドで進める擬似時計、失効したリースをモデルに残すこと、リースを確かめないack</td>
+<td>コマンドで進める擬似時計、失効したリースをモデルに残すこと、リースを確かめないack、2つのワーカーの間の引き継ぎに対する <code>Causality</code></td>
 </tr>
 <tr>
 <td><code>ratelimit</code></td>
 <td>クライアントごとのスライディングウィンドウ制限</td>
-<td>「どの窓でもN件まで」という規則そのものをモデルにすること、クライアントを早く忘れすぎる掃除</td>
+<td>「どの窓でもN件まで」という規則そのものをモデルにすること、クライアントを早く忘れすぎる掃除、時間予算付きの実行が書いた <code>ReportJSON</code> と <code>Observations</code> のファイルをCIのジョブと同じようにテストで読むこと</td>
 </tr>
 <tr>
 <td><code>sessions</code></td>
@@ -170,17 +171,17 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 <tr>
 <td><code>ledger</code></td>
 <td>口座間の送金</td>
-<td>結果を予測するモデルと不変条件だけを確かめる監査の併用、並行実行で捕まえる残高超過の競合</td>
+<td>結果を予測するモデルと不変条件だけを確かめる監査の併用、並行実行で捕まえる残高超過の競合、監査の2つの原因を分けて報告する <code>Signature</code> と <code>MaxFailures</code></td>
 </tr>
 </tbody>
 </table>
 <p><code>examples</code> の中で <code>go test -v -run Caught ./practical/...</code> を実行すると、仕込んだバグの報告を読めます。例題に共通する書き方は、このディレクトリのREADMEに書いてあります。</p>
-<h2 id="heading-3">発見ガイドの例題</h2>
+<h2 id="発見ガイドの例題">発見ガイドの例題</h2>
 <p><a href="https://github.com/ymotongpoo/pbt/tree/main/examples/discovery">examples/discovery</a> には、山口能迪『プロパティはどう思いつくのか　プロパティベーステスト発見ガイド』（現在執筆中）の例題をGoに移植したものがあります。本の例題はfast-checkで書いたものが正式です。このガイドがpbtの各関数の働きを説明するのに対し、この本は書くべきプロパティの見つけ方を扱います。例示テストや代数的性質から、状態機械、並行実行、実行の統計まで、章ごとに仕様からプロパティを導きます。どのプロパティも、仕込んだバグに対して確かめてあります。</p>
 <p>名前が <code>Mutant</code> で終わるテストは、仕込んだバグに対してプロパティを実行するもので、失敗するのが正しい結果です。そのため、環境変数 <code>PBT_MUTANTS</code> がなければスキップします。<code>examples</code> の中で <code>go test -race ./discovery/...</code> を実行すると通常のテストが、<code>./discovery/run_mutants.sh</code> を実行するとすべての変異が捕まるかどうかの確認が走ります。章の一覧はこのディレクトリのREADMEにあります。</p>
-<h2 id="rapid">rapidから移行する</h2>
+<h2 id="rapidから移行する">rapidから移行する</h2>
 <p><a href="https://github.com/ymotongpoo/pbt/blob/main/MIGRATION.md">MIGRATION.md</a> は、rapidのAPIをpbtに表で対応づけ、pbtが加えるものを列挙しています。rapidのテストの大半は1行ずつ置き換えられます。ステートフルテストは形が変わります。pbtは列全体をモデルに対して生成してから実行するためです。<a href="https://github.com/ymotongpoo/pbt/blob/main/BENCHMARK.md">BENCHMARK.md</a> は同じプロパティで両者を比較しています。</p>
-<h2 id="heading-4">参照資料</h2>
+<h2 id="参照資料">参照資料</h2>
 <ul>
 <li>pkg.go.devの<a href="https://pkg.go.dev/go.ymotongpoo.com/pbt">パッケージドキュメント</a>は、すべての関数とオプションを、実行できる例とともに説明しています。</li>
 <li><a href="https://pkg.go.dev/go.ymotongpoo.com/pbt/format">パッケージformatのドキュメント</a>は、すべての形式について、規格のどの部分を扱うかと縮小先を説明しています。</li>
@@ -188,24 +189,30 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 <li><a href="https://github.com/ymotongpoo/pbt/blob/main/CHANGELOG.md">CHANGELOG.md</a> は各リリースの変更を列挙しています。v1.0まではAPIが変わることがあります。</li>
 <li>不具合の報告と質問は<a href="https://github.com/ymotongpoo/pbt">GitHubリポジトリ</a>へお願いします。</li>
 </ul>
-<h2 id="heading-5">フラグの一覧</h2>
+<h2 id="フラグの一覧">フラグの一覧</h2>
 <pre style="background-color:#f7f7f7;-webkit-text-size-adjust:none;"><code><span style="display:flex;"><span>go test ./... -pbt.checks=1000          # ケース数を増やす
 </span></span><span style="display:flex;"><span>go test ./... -pbt.seed=0x1c3           # 実行を繰り返す
 </span></span><span style="display:flex;"><span>go test ./... -pbt.startsize=10 -pbt.maxsize=100
 </span></span><span style="display:flex;"><span>go test ./... -pbt.shrinktime=2m
+</span></span><span style="display:flex;"><span>go test ./... -pbt.checks=1000000 -pbt.budget=30s # 時間で区切った探索
 </span></span><span style="display:flex;"><span>go test ./... -pbt.searchsteps=5000     # 標的型探索を長くする
 </span></span><span style="display:flex;"><span>go test ./... -pbt.failures=3           # 種類の異なる失敗を3件まで集める
+</span></span><span style="display:flex;"><span>go test ./... -pbt.causality=32         # 逐次の接頭辞ごとの継続の数
+</span></span><span style="display:flex;"><span>go test ./... -pbt.warnhealth=duplicate # 選択の重複を警告する
 </span></span><span style="display:flex;"><span>go test ./... -pbt.checkhealth=default  # 無駄な入力や大きすぎる入力で失敗にする
 </span></span><span style="display:flex;"><span>go test ./... -pbt.ignorehealth=slow    # 時間の警告を隠す
 </span></span><span style="display:flex;"><span>go test ./... -pbt.nosave               # testdata/pbt に書き込まない
 </span></span><span style="display:flex;"><span>go test ./... -pbt.replay=testdata/pbt/TestQueue/3f2a… -run TestQueue
 </span></span><span style="display:flex;"><span>go test ./... -pbt.v                    # 要約と縮小のステップを表示する
+</span></span><span style="display:flex;"><span>go test ./... -pbt.json=runs.jsonl       # 実行ごとに1行のJSON
+</span></span><span style="display:flex;"><span>go test ./... -pbt.observe=observations  # Tycheが読むOpenPBTStatsのファイル
+</span></span><span style="display:flex;"><span>go test -cover -coverpkg=./... ./... -pbt.coverage # 実行中のブロック単位のカバレッジで導く
 </span></span></code></pre>
 <div class="pager">
 <span>← <a href="10-formats">規格が定める形式</a></span>
-<span></span>
+<span><a href="12-agents">エージェントでプロジェクトをテストする</a> →</span>
 </div>
-<footer>pbt 利用ガイド for pbt v0.4.0 · <a href="https://github.com/ymotongpoo/pbt/tree/main/docs/guide">source</a> · Apache License 2.0</footer>
+<footer>pbt 利用ガイド for pbt v0.5.0 · <a href="https://github.com/ymotongpoo/pbt/tree/main/docs/guide">source</a> · Apache License 2.0</footer>
 </main>
 </div>
 </body>

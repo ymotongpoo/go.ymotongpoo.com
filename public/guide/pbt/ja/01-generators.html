@@ -52,7 +52,7 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 <div class="layout">
 <nav class="side">
 <h1><a href="./">pbt 利用ガイド</a></h1>
-<div class="version">pbt v0.4.0</div>
+<div class="version">pbt v0.5.0</div>
 <ol>
 <li><a href="./">はじめに</a></li>
 <li class="current"><a href="01-generators">生成器</a></li>
@@ -66,15 +66,16 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 <li><a href="09-types">型から導く生成器</a></li>
 <li><a href="10-formats">規格が定める形式</a></li>
 <li><a href="11-reference">次に読むもの</a></li>
+<li><a href="12-agents">エージェントでプロジェクトをテストする</a></li>
 </ol>
 <div class="lang"><a href="../01-generators">English</a></div>
 <div class="lang"><a href="https://pkg.go.dev/go.ymotongpoo.com/pbt">pkg.go.dev</a> · <a href="https://github.com/ymotongpoo/pbt">GitHub</a></div>
 <div class="lang"><a href="01-generators.md">Markdown</a> · <a href="/pbt/llms.txt">llms.txt</a></div>
 </nav>
 <main>
-<h1 id="heading">生成器</h1>
+<h1 id="生成器">生成器</h1>
 <p>生成器は <code>pbt.Gen[V]</code> 型の値です。pbtが現在のケースについて記録している選択から <code>V</code> を作る方法を知っていて、その記録が縮小と再現を支えています。記録を自分で組むことはありません。生成器を組み合わせて、そこから値を取り出すだけです。</p>
-<h2 id="heading-1">組み込みの生成器</h2>
+<h2 id="組み込みの生成器">組み込みの生成器</h2>
 <table>
 <thead>
 <tr>
@@ -122,7 +123,7 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 </tbody>
 </table>
 <p>整数は、バグが潜みやすい範囲の境界と小さな値に寄ります。文字列とコレクションの長さは、ケースのサイズパラメーターに従います。最大長の <code>-1</code> は上限なしを意味します。RFC 3339のタイムスタンプ、メールアドレス、URIなど、規格が定める形式の文字列は、パッケージ <code>go.ymotongpoo.com/pbt/format</code> が生成します。このパッケージは10章で説明します。</p>
-<h2 id="heading-2">時刻とアドレス</h2>
+<h2 id="時刻とアドレス">時刻とアドレス</h2>
 <p>時刻とアドレスの生成器も整数と同じ方針で、コードが誤動作しやすい値に寄ります。<code>Time</code> は、<code>time.Time</code> のゼロ値から9999年の終わりまでの時刻を生成します。そのうち半分近くは暦の境目へ移します。境目とは、日、月、年の最初または最後のナノ秒、2月29日、範囲の端です。保存されたタイムスタンプの多くはマイクロ秒、ミリ秒、秒の単位までしか持たないので、一部のケースでは秒未満の端数をそれらの単位に丸めます。1か月後の日付を求める計算は、こうした値で誤動作する典型例です。</p>
 <pre style="background-color:#f7f7f7;-webkit-text-size-adjust:none;"><code><span style="display:flex;"><span><span style="color:#cf222e">var</span><span style="color:#fff"> </span><span style="color:#1f2328">billingProperty</span><span style="color:#fff"> </span><span style="color:#1f2328">=</span><span style="color:#fff"> </span><span style="color:#cf222e">func</span><span style="color:#1f2328">(</span><span style="color:#1f2328">t</span><span style="color:#fff"> </span><span style="color:#0550ae">*</span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#1f2328">T</span><span style="color:#1f2328">)</span><span style="color:#fff"> </span><span style="color:#1f2328">{</span><span style="color:#fff">
 </span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#1f2328">start</span><span style="color:#fff"> </span><span style="color:#0550ae">:=</span><span style="color:#fff"> </span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#6639ba">Time</span><span style="color:#1f2328">().</span><span style="color:#6639ba">Draw</span><span style="color:#1f2328">(</span><span style="color:#1f2328">t</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#0a3069">&#34;&#34;</span><span style="color:#1f2328">)</span><span style="color:#fff">
@@ -153,7 +154,7 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 </span></span></span><span style="display:flex;"><span><span style="color:#fff">		</span><span style="color:#1f2328">}</span><span style="color:#fff">
 </span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#1f2328">})</span><span style="color:#fff">
 </span></span></span><span style="display:flex;"><span><span style="color:#1f2328">}</span><span style="color:#fff">
-</span></span></span></code></pre><h2 id="heading-3">パターンに一致する文字列</h2>
+</span></span></span></code></pre><h2 id="パターンに一致する文字列">パターンに一致する文字列</h2>
 <p><code>StringMatching</code> は、パッケージ <code>regexp</code> の構文で書いた正規表現から文字列を組みます。どの値もパターン全体に一致し、縮小しても一致したままです。<code>|</code> で並べた分岐は前の分岐へ、繰り返しは最小の回数へ、文字クラスはその中で最初の印字可能なASCII文字へ縮みます。<code>RuneIn</code> は、スクリプトやカテゴリなど、パッケージ <code>unicode</code> の範囲表からルーンを生成します。表の各範囲が同じ確率で選ばれるので、小さなスクリプトがCJK統合漢字に埋もれることはありません。</p>
 <pre style="background-color:#f7f7f7;-webkit-text-size-adjust:none;"><code><span style="display:flex;"><span><span style="color:#57606a">// An order number has two capital letters, a dash and four digits.</span><span style="color:#fff">
 </span></span></span><span style="display:flex;"><span><span style="color:#cf222e">var</span><span style="color:#fff"> </span><span style="color:#1f2328">orderID</span><span style="color:#fff"> </span><span style="color:#1f2328">=</span><span style="color:#fff"> </span><span style="color:#1f2328">regexp</span><span style="color:#1f2328">.</span><span style="color:#6639ba">MustCompile</span><span style="color:#1f2328">(</span><span style="color:#0a3069">`^[A-Z]{2}-\d{4}$`</span><span style="color:#1f2328">)</span><span style="color:#fff">
@@ -170,7 +171,7 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 </span></span></span><span style="display:flex;"><span><span style="color:#fff">		</span><span style="color:#1f2328">}</span><span style="color:#fff">
 </span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#1f2328">})</span><span style="color:#fff">
 </span></span></span><span style="display:flex;"><span><span style="color:#1f2328">}</span><span style="color:#fff">
-</span></span></span></code></pre><h2 id="heading-4">自分の生成器を作る</h2>
+</span></span></span></code></pre><h2 id="自分の生成器を作る">自分の生成器を作る</h2>
 <p><code>pbt.Custom</code> は <code>*pbt.T</code> を受け取る関数を生成器にします。その中では、他の生成器から任意の順序と制御構造で値を取り出せます。</p>
 <pre style="background-color:#f7f7f7;-webkit-text-size-adjust:none;"><code><span style="display:flex;"><span><span style="color:#cf222e">type</span><span style="color:#fff"> </span><span style="color:#1f2328">User</span><span style="color:#fff"> </span><span style="color:#cf222e">struct</span><span style="color:#fff"> </span><span style="color:#1f2328">{</span><span style="color:#fff">
 </span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#1f2328">Name</span><span style="color:#fff">  </span><span style="color:#cf222e">string</span><span style="color:#fff">
@@ -189,7 +190,7 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 </span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#1f2328">}</span><span style="color:#fff">
 </span></span></span><span style="display:flex;"><span><span style="color:#1f2328">})</span><span style="color:#fff">
 </span></span></span></code></pre><p><code>Custom</code> に渡した名前が、報告でのこの生成器の表記になります。中で行う取り出しのラベルにも役割があります。生成器の中でラベルを付けて取り出した値は、組み上げた値の下に字下げして報告に並びます。<code>&quot;&quot;</code> でラベルを付けなかった値は報告に出ません。それ自体には関心のない値には、この扱いが向いています。</p>
-<h2 id="heading-5">生成器を組み合わせる</h2>
+<h2 id="生成器を組み合わせる">生成器を組み合わせる</h2>
 <p>組み合わせの大半は3つの関数で書けます。</p>
 <pre style="background-color:#f7f7f7;-webkit-text-size-adjust:none;"><code><span style="display:flex;"><span><span style="color:#57606a">// Map transforms a value, Filter keeps the values that satisfy a predicate,</span><span style="color:#fff">
 </span></span></span><span style="display:flex;"><span><span style="color:#57606a">// and Bind picks the next generator from a value.</span><span style="color:#fff">
@@ -207,7 +208,7 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 <li><code>Bind</code> は値から次の生成器を選びます。値の一部を別の部分に依存させる手段で、PropErでは <code>?LET</code> と呼びます。</li>
 </ul>
 <p><code>OneOf</code> は複数の生成器から等確率で1つを選び、<code>Frequency</code> は重みで選びます。どちらも2章で扱います。<code>Ptr</code> は値をポインタで包み、<code>nil</code> を含めるかどうかを選べます。<code>Lazy</code> は生成器の構築を最初に値を取り出すときまで遅らせます。再帰的な生成器が自分自身を参照するために必要で、上限を付けた形は9章で示します。</p>
-<h2 id="heading-6">報告は値の組み上がり方を示す</h2>
+<h2 id="報告は値の組み上がり方を示す">報告は値の組み上がり方を示す</h2>
 <p><code>User</code> で失敗するプロパティの報告には、そのユーザーと、その下にラベル付きの部品が並びます。</p>
 <pre style="background-color:#f7f7f7;-webkit-text-size-adjust:none;"><code><span style="display:flex;"><span><span style="color:#cf222e">var</span><span style="color:#fff"> </span><span style="color:#1f2328">displayNameProperty</span><span style="color:#fff"> </span><span style="color:#1f2328">=</span><span style="color:#fff"> </span><span style="color:#cf222e">func</span><span style="color:#1f2328">(</span><span style="color:#1f2328">t</span><span style="color:#fff"> </span><span style="color:#0550ae">*</span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#1f2328">T</span><span style="color:#1f2328">)</span><span style="color:#fff"> </span><span style="color:#1f2328">{</span><span style="color:#fff">
 </span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#1f2328">u</span><span style="color:#fff"> </span><span style="color:#0550ae">:=</span><span style="color:#fff"> </span><span style="color:#1f2328">userGen</span><span style="color:#1f2328">.</span><span style="color:#6639ba">Draw</span><span style="color:#1f2328">(</span><span style="color:#1f2328">t</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#0a3069">&#34;user&#34;</span><span style="color:#1f2328">)</span><span style="color:#fff">
@@ -227,7 +228,7 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 </span></span><span style="display:flex;"><span>[pbt] reproduce: go test -run &#39;TestDisplayName&#39; -pbt.seed=0x1
 </span></span></code></pre><p>名前は、長さの検査にまだ引っかかる最短の文字列である <code>a</code> 9文字まで縮みました。年齢は失敗に関係しないので0まで縮んでいます。報告はラベル付きの値を3段の深さまで載せ、1つの値を2000文字で切ります。<code>ReportDepth</code> と <code>ReportLimit</code> のオプションで両方を変えられます。</p>
 <p>プロパティの最上位で取り出した値は、ラベルがなくても報告に載ります。上の <code>start := pbt.Time().Draw(t, &quot;&quot;)</code> のように取り出した値を1つの変数に代入していれば、報告はその変数の名前で値を示します。そうでなければ、<code>Int() at prop_test.go:12 = 5</code> のように、取り出したファイルと行を示します。報告を作るとき、pbtはソースファイルを読んで変数の名前を探します。<code>-trimpath</code> を付けてビルドしたバイナリのようにファイルを読めないときは、行を示します。<code>Verbose()</code> か <code>-pbt.v</code> を付けると、すべての取り出しに行が付きます。</p>
-<h2 id="heading-7">プロパティの外で値を見る</h2>
+<h2 id="プロパティの外で値を見る">プロパティの外で値を見る</h2>
 <p><code>Example</code> は生成器の値を1つ返します。生成器の出力を手早く確かめるときや、従来のテストでそれらしい入力が必要なときに使います。生成器のコードとpbtのバージョンが同じであれば、シードを渡すと値が固定されます。</p>
 <pre style="background-color:#f7f7f7;-webkit-text-size-adjust:none;"><code><span style="display:flex;"><span><span style="color:#cf222e">func</span><span style="color:#fff"> </span><span style="color:#6639ba">TestExample</span><span style="color:#1f2328">(</span><span style="color:#1f2328">t</span><span style="color:#fff"> </span><span style="color:#0550ae">*</span><span style="color:#1f2328">testing</span><span style="color:#1f2328">.</span><span style="color:#1f2328">T</span><span style="color:#1f2328">)</span><span style="color:#fff"> </span><span style="color:#1f2328">{</span><span style="color:#fff">
 </span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#1f2328">u</span><span style="color:#fff"> </span><span style="color:#0550ae">:=</span><span style="color:#fff"> </span><span style="color:#1f2328">userGen</span><span style="color:#1f2328">.</span><span style="color:#6639ba">Example</span><span style="color:#1f2328">(</span><span style="color:#0550ae">42</span><span style="color:#1f2328">)</span><span style="color:#fff"> </span><span style="color:#57606a">// a sample outside any property; the seed fixes it</span><span style="color:#fff">
@@ -235,14 +236,14 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 </span></span></span><span style="display:flex;"><span><span style="color:#fff">		</span><span style="color:#1f2328">t</span><span style="color:#1f2328">.</span><span style="color:#6639ba">Fatalf</span><span style="color:#1f2328">(</span><span style="color:#0a3069">&#34;unexpected user %+v&#34;</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#1f2328">u</span><span style="color:#1f2328">)</span><span style="color:#fff">
 </span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#1f2328">}</span><span style="color:#fff">
 </span></span></span><span style="display:flex;"><span><span style="color:#1f2328">}</span><span style="color:#fff">
-</span></span></span></code></pre><h2 id="heading-8">生成器が共有する値</h2>
+</span></span></span></code></pre><h2 id="生成器が共有する値">生成器が共有する値</h2>
 <p><code>Just(v)</code> はすべてのケースに同じ <code>v</code> を返します。<code>v</code> がスライス、マップ、ポインタなら、すべてのケースが同じオブジェクトを見ます。プロパティがそれを変更すると、後のケースと報告が見るものも変わってしまいます。<code>SampledFrom(values)</code> はスライスをコピーしますが、要素はそのまま渡します。プロパティが値を変更する必要があるなら、<code>Custom</code> で毎回新しい値を作ってください。</p>
 
 <div class="pager">
 <span>← <a href="./">はじめに</a></span>
 <span><a href="02-distribution">サイズ、分布、統計</a> →</span>
 </div>
-<footer>pbt 利用ガイド for pbt v0.4.0 · <a href="https://github.com/ymotongpoo/pbt/tree/main/docs/guide">source</a> · Apache License 2.0</footer>
+<footer>pbt 利用ガイド for pbt v0.5.0 · <a href="https://github.com/ymotongpoo/pbt/tree/main/docs/guide">source</a> · Apache License 2.0</footer>
 </main>
 </div>
 </body>

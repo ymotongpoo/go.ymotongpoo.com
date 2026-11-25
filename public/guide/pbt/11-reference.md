@@ -24,10 +24,10 @@ The `examples/practical` directory tests small but realistic systems the way a p
 | Package | System | Shows |
 | --- | --- | --- |
 | `httpapi` | a REST API with optimistic concurrency, served by `httptest` | server-assigned ids as `Var`s, status codes as postconditions, a parallel run against a server that allocates ids outside its lock |
-| `jobqueue` | a worker queue with leases, a visibility timeout and dead letters | a fake clock advanced by a command, stale leases kept in the model, an ack that does not check its lease |
-| `ratelimit` | a sliding-window limiter per client | the rule "at most N requests in any window" as the model, a sweep that forgets clients too early |
+| `jobqueue` | a worker queue with leases, a visibility timeout and dead letters | a fake clock advanced by a command, stale leases kept in the model, an ack that does not check its lease, `Causality` on a handoff between two workers |
+| `ratelimit` | a sliding-window limiter per client | the rule "at most N requests in any window" as the model, a sweep that forgets clients too early, a budgeted run whose `ReportJSON` and `Observations` files a test reads the way a CI job would |
 | `sessions` | a session store with expiry, refresh and logout | the `fsm` package with state data and a clock, time as a transition split by where it leads |
-| `ledger` | transfers between accounts | a model next to an audit that checks only the invariants, an overdraft race caught in parallel |
+| `ledger` | transfers between accounts | a model next to an audit that checks only the invariants, an overdraft race caught in parallel, `Signature` and `MaxFailures` reporting two causes of the audit apart |
 
 Run `go test -v -run Caught ./practical/...` inside `examples` to read the reports of the planted bugs. The README of the directory describes the patterns the examples share.
 
@@ -56,11 +56,17 @@ go test ./... -pbt.checks=1000          # more cases
 go test ./... -pbt.seed=0x1c3           # repeat a run
 go test ./... -pbt.startsize=10 -pbt.maxsize=100
 go test ./... -pbt.shrinktime=2m
+go test ./... -pbt.checks=1000000 -pbt.budget=30s # time-limited search
 go test ./... -pbt.searchsteps=5000     # longer targeted searches
 go test ./... -pbt.failures=3           # collect up to three distinct failures
+go test ./... -pbt.causality=32         # continuations per sequential prefix
+go test ./... -pbt.warnhealth=duplicate # warn about repeated choices
 go test ./... -pbt.checkhealth=default  # fail on wasted or oversized input
 go test ./... -pbt.ignorehealth=slow    # hide the timing warning
 go test ./... -pbt.nosave               # keep testdata/pbt untouched
 go test ./... -pbt.replay=testdata/pbt/TestQueue/3f2a… -run TestQueue
 go test ./... -pbt.v                    # summaries and shrink steps
+go test ./... -pbt.json=runs.jsonl       # one JSON line per run
+go test ./... -pbt.observe=observations  # OpenPBTStats files for Tyche
+go test -cover -coverpkg=./... ./... -pbt.coverage # guide with live block coverage
 ```

@@ -52,7 +52,7 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 <div class="layout">
 <nav class="side">
 <h1><a href="./">pbt 利用ガイド</a></h1>
-<div class="version">pbt v0.4.0</div>
+<div class="version">pbt v0.5.0</div>
 <ol>
 <li><a href="./">はじめに</a></li>
 <li><a href="01-generators">生成器</a></li>
@@ -66,15 +66,16 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 <li><a href="09-types">型から導く生成器</a></li>
 <li><a href="10-formats">規格が定める形式</a></li>
 <li><a href="11-reference">次に読むもの</a></li>
+<li><a href="12-agents">エージェントでプロジェクトをテストする</a></li>
 </ol>
 <div class="lang"><a href="../02-distribution">English</a></div>
 <div class="lang"><a href="https://pkg.go.dev/go.ymotongpoo.com/pbt">pkg.go.dev</a> · <a href="https://github.com/ymotongpoo/pbt">GitHub</a></div>
 <div class="lang"><a href="02-distribution.md">Markdown</a> · <a href="/pbt/llms.txt">llms.txt</a></div>
 </nav>
 <main>
-<h1 id="heading">サイズ、分布、統計</h1>
+<h1 id="サイズ分布統計">サイズ、分布、統計</h1>
 <p>pbtでは、データがどんな姿になるかを利用者が決め、意図したとおりになっているかを確かめる手段も利用者が持ちます。この2つは対になっています。システムの興味深い状態に到達しないプロパティは、その状態について何も証明しません。</p>
-<h2 id="heading-1">サイズパラメーター</h2>
+<h2 id="サイズパラメーター">サイズパラメーター</h2>
 <p>すべてのテストケースはサイズを持って実行されます。<code>Check</code> はサイズ1から始め、ケースが通過するごとに1ずつ、42まで増やします。実行は小さな入力で始まり、大きな入力で終わります。文字列、スライス、マップの長さはサイズを平均とし、整数の大きさもサイズとともに増えます。<code>t.Size()</code> は現在のケースのサイズを返します。<code>Sizes(start, max)</code> オプション、またはフラグ <code>-pbt.startsize</code> と <code>-pbt.maxsize</code> で範囲を変えられます。</p>
 <p><code>Sized</code> はサイズから生成器を組みます。PropErの <code>?SIZED</code> と同じ働きです。<code>Resize</code> は生成器を固定したサイズで動かします。2つを組み合わせると、再帰的な構造に上限を付けられます。</p>
 <pre style="background-color:#f7f7f7;-webkit-text-size-adjust:none;"><code><span style="display:flex;"><span><span style="color:#57606a">// A tree whose depth follows the size parameter: small early cases, larger</span><span style="color:#fff">
@@ -96,7 +97,7 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 </span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#1f2328">})</span><span style="color:#fff">
 </span></span></span><span style="display:flex;"><span><span style="color:#1f2328">}</span><span style="color:#fff">
 </span></span></span></code></pre><p>段ごとにサイズを半分にすると、分岐の数がいくつでも、木の深さはサイズの対数以下に収まります。<code>SliceOf</code> のようにサイズを使うコレクション生成器では、正の最小長が指定されていなければ、<code>Resize(0, g)</code> は空のコレクションを生成します。<code>Resize</code> が固定するのはサイズパラメーターだけなので、<code>SliceOfN</code> で指定した長さの制約は保たれます。<code>Resize(0, SliceOfN(Int(), 1, 3))</code> は要素を1つ生成します。</p>
-<h2 id="heading-2">重み</h2>
+<h2 id="重み">重み</h2>
 <p><code>Frequency</code> は、重みに比例した確率で選択肢の1つから値を取り出します。</p>
 <pre style="background-color:#f7f7f7;-webkit-text-size-adjust:none;"><code><span style="display:flex;"><span><span style="color:#cf222e">type</span><span style="color:#fff"> </span><span style="color:#1f2328">Op</span><span style="color:#fff"> </span><span style="color:#cf222e">struct</span><span style="color:#fff"> </span><span style="color:#1f2328">{</span><span style="color:#fff">
 </span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#1f2328">Kind</span><span style="color:#fff"> </span><span style="color:#cf222e">string</span><span style="color:#fff">
@@ -110,7 +111,7 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 </span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#6639ba">W</span><span style="color:#1f2328">(</span><span style="color:#0550ae">1</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#6639ba">Map</span><span style="color:#1f2328">(</span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#6639ba">StringN</span><span style="color:#1f2328">(</span><span style="color:#0550ae">1</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#0550ae">3</span><span style="color:#1f2328">),</span><span style="color:#fff"> </span><span style="color:#cf222e">func</span><span style="color:#1f2328">(</span><span style="color:#1f2328">k</span><span style="color:#fff"> </span><span style="color:#cf222e">string</span><span style="color:#1f2328">)</span><span style="color:#fff"> </span><span style="color:#1f2328">Op</span><span style="color:#fff"> </span><span style="color:#1f2328">{</span><span style="color:#fff"> </span><span style="color:#cf222e">return</span><span style="color:#fff"> </span><span style="color:#1f2328">Op</span><span style="color:#1f2328">{</span><span style="color:#0a3069">&#34;put&#34;</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#1f2328">k</span><span style="color:#1f2328">}</span><span style="color:#fff"> </span><span style="color:#1f2328">})),</span><span style="color:#fff">
 </span></span></span><span style="display:flex;"><span><span style="color:#1f2328">)</span><span style="color:#fff">
 </span></span></span></code></pre><p>重みが影響するのは生成だけです。縮小は重みに関係なく常に先頭の選択肢へ向かうので、選択肢の並び順が縮小の優先順位になります。重み0の選択肢は生成されず、縮小によってだけ到達できます。3章の <code>ShrinkTo</code> はこの性質の上に組んであります。<code>OneOf</code> は重みが等しい <code>Frequency</code> です。</p>
-<h2 id="heading-3">統計</h2>
+<h2 id="統計">統計</h2>
 <p><code>*pbt.T</code> の4つのメソッドが、実行したケースの様子を記述します。プロパティが通過すると <code>Check</code> が結果を表示します。</p>
 <pre style="background-color:#f7f7f7;-webkit-text-size-adjust:none;"><code><span style="display:flex;"><span><span style="color:#cf222e">func</span><span style="color:#fff"> </span><span style="color:#6639ba">TestOperationMix</span><span style="color:#1f2328">(</span><span style="color:#1f2328">t</span><span style="color:#fff"> </span><span style="color:#0550ae">*</span><span style="color:#1f2328">testing</span><span style="color:#1f2328">.</span><span style="color:#1f2328">T</span><span style="color:#1f2328">)</span><span style="color:#fff"> </span><span style="color:#1f2328">{</span><span style="color:#fff">
 </span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#6639ba">Check</span><span style="color:#1f2328">(</span><span style="color:#1f2328">t</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#cf222e">func</span><span style="color:#1f2328">(</span><span style="color:#1f2328">t</span><span style="color:#fff"> </span><span style="color:#0550ae">*</span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#1f2328">T</span><span style="color:#1f2328">)</span><span style="color:#fff"> </span><span style="color:#1f2328">{</span><span style="color:#fff">
@@ -138,7 +139,7 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 </span></span><span style="display:flex;"><span>[pbt]  18.9% put
 </span></span><span style="display:flex;"><span>[pbt] batch length: min 1, avg 12.43, max 20 (100 samples)
 </span></span></code></pre><p>割合は4対1の重みどおりで、長さの行は上限いっぱいのバッチも出ていることを示しています。<code>Verbose()</code> か <code>-pbt.v</code> を付けると、プロパティが何も記録していなくても要約が出ます。</p>
-<h2 id="heading-4">カバレッジを検査する</h2>
+<h2 id="カバレッジを検査する">カバレッジを検査する</h2>
 <p><code>Cover(cond, pct, label)</code> は観察を要求に変えます。<code>cond</code> が成り立つケースが、通過した全ケースの <code>pct</code> パーセント以上を占めなければならない、という要求です。上の例では、バッチの60%に書き込みが含まれることを要求しています。</p>
 <p>100ケースの実行が偶然60%を下回ることはあるので、100%未満の要求は統計的に判定します。pbtは観測した割合の99.7%信頼区間であるWilsonスコア区間を計算します。区間の下限が <code>pct</code> 以上なら充足、上限が <code>pct</code> 未満なら不足、それ以外は未決です。100%の要求は統計で判定せず、通過したすべてのケースでそのラベルに該当すれば充足、1ケースでも該当しなければ不足です。<code>CheckCoverage</code> オプションがなければ、<code>Check</code> は不足をログに出して通過します。オプションがあると、<code>Check</code> はすべての要求が決まるまで、設定した回数の20倍を上限にケースを走らせ続けます。不足なら失敗し、要求が未決のまま終わったときも失敗します。通過したなら、データがその割合を裏付けています。</p>
 <pre style="background-color:#f7f7f7;-webkit-text-size-adjust:none;"><code><span style="display:flex;"><span><span style="color:#cf222e">var</span><span style="color:#fff"> </span><span style="color:#1f2328">rareCoverProperty</span><span style="color:#fff"> </span><span style="color:#1f2328">=</span><span style="color:#fff"> </span><span style="color:#cf222e">func</span><span style="color:#1f2328">(</span><span style="color:#1f2328">t</span><span style="color:#fff"> </span><span style="color:#0550ae">*</span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#1f2328">T</span><span style="color:#1f2328">)</span><span style="color:#fff"> </span><span style="color:#1f2328">{</span><span style="color:#fff">
@@ -148,8 +149,8 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 </span></span></span></code></pre><pre style="background-color:#f7f7f7;-webkit-text-size-adjust:none;"><code><span style="display:flex;"><span>[pbt] insufficient coverage:
 </span></span><span style="display:flex;"><span>[pbt]   round hundred: 17.6% of 125 cases, required 30.0%
 </span></span></code></pre><p>区間が30%を除外した時点、つまり125ケースで実行は止まりました。観測された割合は <code>IntRange</code> についても教えてくれます。0は境界値なので、1000分の1よりずっと頻繫に出ているのです。統計はそれを知る手段で、一様な分布がプロパティに必要なときに分布を変える手段が <code>Frequency</code> や <code>SampledFrom</code> です。</p>
-<h2 id="heading-5">ヘルスチェック</h2>
-<p>統計は、利用者が立てた問いに答えます。ヘルスチェックは、利用者が思い付かないかもしれない問い、つまり実行がケースを無駄なく使っているかに答えます。<code>Check</code> はすべての実行を監視し、入力に関する3つの問題を警告します。</p>
+<h2 id="ヘルスチェック">ヘルスチェック</h2>
+<p>統計は、利用者が立てた問いに答えます。ヘルスチェックは、利用者が思い付かないかもしれない問い、つまり実行がケースを無駄なく使っているかに答えます。<code>Check</code> はすべての実行を監視し、無駄になった入力、手間のかかる生成、保存した入力の変化を警告します。オプションの検査を有効にすると、選択の重複も検出します。</p>
 <table>
 <thead>
 <tr>
@@ -170,6 +171,14 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 <td><code>HealthSlow</code></td>
 <td>プロパティ自身の処理を除いた値の取り出しに、1ケースあたり10ミリ秒、合計で1秒かかった</td>
 </tr>
+<tr>
+<td><code>HealthStale</code></td>
+<td>保存したケースの取り出しのコメントが、再実行で得た取り出しと異なる。デフォルトで警告する</td>
+</tr>
+<tr>
+<td><code>HealthDuplicate</code></td>
+<td>破棄されなかった20件以上のランダムなケースのうち、選択列が異なる入力が半分に満たない。デフォルトでは無効</td>
+</tr>
 </tbody>
 </table>
 <p>長い文字列だけを残すプロパティでは、表の最初の検査 <code>HealthFilter</code> が警告を出します。</p>
@@ -184,13 +193,26 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 </span></span></span><span style="display:flex;"><span><span style="color:#1f2328">}</span><span style="color:#fff">
 </span></span></span></code></pre><pre style="background-color:#f7f7f7;-webkit-text-size-adjust:none;"><code><span style="display:flex;"><span>[pbt] health: HealthFilter: 629 of 729 cases were discarded; most by Assume at health_test.go:18 (629) (CheckHealth(HealthFilter) makes this fail; IgnoreHealth(HealthFilter) hides it)
 </span></span></code></pre><p>実行は通過しましたが、100ケースを得るために729ケースを走らせており、警告は残りを捨てた行を示しています。長い文字列を組む生成器 <code>StringN(8, 40)</code> を使えば、この無駄はなくなります。警告は、破棄や却下の多かった箇所を示します。<code>Filter</code> ならその説明、<code>Assume</code> や <code>Skip</code> なら呼び出した行です。<code>HealthLarge</code> は、最も多くの選択を使った取り出しを示します。</p>
-<p>ヘルスチェックはデフォルトでは <code>Cover</code> と同じく警告だけを出し、実行は通過します。<code>CheckHealth()</code> を付けると、<code>HealthFilter</code> か <code>HealthLarge</code> の警告が出た実行は、プロパティが通過していても失敗になります。<code>CheckHealth(HealthSlow)</code> は時間の検査を加えます。負荷の高いCIマシンでは引っかかることがあるので、この検査はデフォルトでは含めていません。<code>IgnoreHealth(checks...)</code> は検査を隠し、<code>CheckHealth</code> より優先されます。フラグ <code>-pbt.checkhealth</code> と <code>-pbt.ignorehealth</code> は同じ検査を名前で受け取り、<code>go test</code> の実行中のすべての <code>Check</code> に効きます。例えば <code>-pbt.checkhealth=default,slow</code> です。失敗した実行には、さらに <code>HealthFlaky</code> と <code>HealthShrink</code> の2つの検査が働きます。この2つは3章で説明します。</p>
+<p><code>HealthDuplicate</code> 以外のヘルスチェックは、デフォルトでは <code>Cover</code> と同じく警告だけを出し、実行は通過します。<code>CheckHealth()</code> を付けると、<code>HealthFilter</code> か <code>HealthLarge</code> の警告が出た実行は、プロパティが通過していても失敗になります。<code>CheckHealth(HealthSlow)</code> は時間の検査を加えます。負荷の高いCIマシンでは引っかかることがあるので、この検査はデフォルトでは含めていません。<code>CheckHealth(HealthStale)</code> を付けると、保存したケースの陳腐化が通過した実行を失敗にします。生成器は意図して変えることもあるので、<code>CheckHealth()</code> はこの検査を警告のまま残します。<code>IgnoreHealth(checks...)</code> は検査を隠し、<code>CheckHealth</code> と <code>WarnHealth</code> より優先されます。</p>
+<p>フラグ <code>-pbt.checkhealth</code> と <code>-pbt.ignorehealth</code> は同じ検査を名前で受け取り、<code>go test</code> の実行中のすべての <code>Check</code> に効きます。例えば <code>-pbt.checkhealth=default,slow</code> です。失敗した実行には、さらに <code>HealthFlaky</code> と <code>HealthShrink</code> の2つの検査が働きます。この2つは3章で説明します。</p>
+<p><code>HealthStale</code> の警告は、保存した同じ選択が、今は別の取り出しの文字列になることを意味します。直したはずのバグがまだ失敗するという意味ではありません。警告は、ファイルと、最初に変わった取り出しを示します。再実行の結果を信じる前に何を確かめればよいかは、<a href="04-properties#%E3%82%B7%E3%83%BC%E3%83%89%E4%BF%9D%E5%AD%98%E3%81%97%E3%81%9F%E3%82%B1%E3%83%BC%E3%82%B9%E5%86%8D%E5%AE%9F%E8%A1%8C">4章</a>で説明します。</p>
+<p><code>WarnHealth(HealthDuplicate)</code> か <code>-pbt.warnhealth=duplicate</code> を付けると、重複の警告が有効になります。<code>CheckHealth(HealthDuplicate)</code> を付けると、エラーとして有効になります。引数のない <code>WarnHealth()</code> は何も変えません。ヘルスチェックのフラグとオプションは足し合わされ、<code>CheckHealth</code> がエラーにした検査を <code>WarnHealth</code> で警告に戻すことはできません。</p>
+<pre style="background-color:#f7f7f7;-webkit-text-size-adjust:none;"><code><span style="display:flex;"><span><span style="color:#cf222e">func</span><span style="color:#fff"> </span><span style="color:#6639ba">checkSwitch</span><span style="color:#1f2328">(</span><span style="color:#1f2328">tb</span><span style="color:#fff"> </span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#1f2328">TB</span><span style="color:#1f2328">)</span><span style="color:#fff"> </span><span style="color:#1f2328">{</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#6639ba">Check</span><span style="color:#1f2328">(</span><span style="color:#1f2328">tb</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#cf222e">func</span><span style="color:#1f2328">(</span><span style="color:#1f2328">t</span><span style="color:#fff"> </span><span style="color:#0550ae">*</span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#1f2328">T</span><span style="color:#1f2328">)</span><span style="color:#fff"> </span><span style="color:#1f2328">{</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">		</span><span style="color:#1f2328">enabled</span><span style="color:#fff"> </span><span style="color:#0550ae">:=</span><span style="color:#fff"> </span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#6639ba">Bool</span><span style="color:#1f2328">().</span><span style="color:#6639ba">Draw</span><span style="color:#1f2328">(</span><span style="color:#1f2328">t</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#0a3069">&#34;enabled&#34;</span><span style="color:#1f2328">)</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">		</span><span style="color:#1f2328">t</span><span style="color:#1f2328">.</span><span style="color:#6639ba">Classify</span><span style="color:#1f2328">(</span><span style="color:#1f2328">enabled</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#0a3069">&#34;enabled&#34;</span><span style="color:#1f2328">)</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#1f2328">},</span><span style="color:#fff"> </span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#6639ba">Seed</span><span style="color:#1f2328">(</span><span style="color:#0550ae">1</span><span style="color:#1f2328">),</span><span style="color:#fff"> </span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#6639ba">Checks</span><span style="color:#1f2328">(</span><span style="color:#0550ae">20</span><span style="color:#1f2328">),</span><span style="color:#fff"> </span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#6639ba">WarnHealth</span><span style="color:#1f2328">(</span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#1f2328">HealthDuplicate</span><span style="color:#1f2328">))</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#1f2328">}</span><span style="color:#fff">
+</span></span></span></code></pre><p>真偽値の定義域には値が2つしかないので、この実行は意図して同じ値を繰り返します。</p>
+<pre style="background-color:#f7f7f7;-webkit-text-size-adjust:none;"><code><span style="display:flex;"><span>[pbt] health: HealthDuplicate: only 2 of 20 generated inputs were distinct by their choices; possible causes include a small domain such as Bool or SampledFrom, a low maximum size, or more Checks than the input space has values (CheckHealth(HealthDuplicate) makes this fail; IgnoreHealth(HealthDuplicate) hides it)
+</span></span></code></pre><p><code>HealthDuplicate</code> は、通常のランダムな生成で得た、通過したケースと失敗したケースを数えます。破棄されたケース、保存したケースの再実行、縮小、標的型探索は数えません。カバレッジ誘導探索の変異も数えません。キーには使った選択のハッシュを使い、サイズは含めません。サイズは実行の間に増えるので、含めると序盤のほとんどのケースで選択の重複が見えなくなります。</p>
+<p>この数は、異なる値の数の近似です。異なる選択が同じ値になることもあり、サイズだけから導いた値は重複として数えられます。異なるキーが4096を超えると数えるのをやめます。小さな定義域は意図したものであることも多いので、この検査は明示的なオプションを必要とします。</p>
 
 <div class="pager">
 <span>← <a href="01-generators">生成器</a></span>
 <span><a href="03-shrinking">縮小</a> →</span>
 </div>
-<footer>pbt 利用ガイド for pbt v0.4.0 · <a href="https://github.com/ymotongpoo/pbt/tree/main/docs/guide">source</a> · Apache License 2.0</footer>
+<footer>pbt 利用ガイド for pbt v0.5.0 · <a href="https://github.com/ymotongpoo/pbt/tree/main/docs/guide">source</a> · Apache License 2.0</footer>
 </main>
 </div>
 </body>

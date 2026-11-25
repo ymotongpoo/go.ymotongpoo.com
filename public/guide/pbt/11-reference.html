@@ -52,7 +52,7 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 <div class="layout">
 <nav class="side">
 <h1><a href="./">pbt user guide</a></h1>
-<div class="version">pbt v0.4.0</div>
+<div class="version">pbt v0.5.0</div>
 <ol>
 <li><a href="./">Getting started</a></li>
 <li><a href="01-generators">Generators</a></li>
@@ -66,6 +66,7 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 <li><a href="09-types">Generators from types</a></li>
 <li><a href="10-formats">Standard formats</a></li>
 <li class="current"><a href="11-reference">Where to go next</a></li>
+<li><a href="12-agents">Testing a project with an agent</a></li>
 </ol>
 <div class="lang"><a href="ja/11-reference">日本語</a></div>
 <div class="lang"><a href="https://pkg.go.dev/go.ymotongpoo.com/pbt">pkg.go.dev</a> · <a href="https://github.com/ymotongpoo/pbt">GitHub</a></div>
@@ -146,12 +147,12 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 <tr>
 <td><code>jobqueue</code></td>
 <td>a worker queue with leases, a visibility timeout and dead letters</td>
-<td>a fake clock advanced by a command, stale leases kept in the model, an ack that does not check its lease</td>
+<td>a fake clock advanced by a command, stale leases kept in the model, an ack that does not check its lease, <code>Causality</code> on a handoff between two workers</td>
 </tr>
 <tr>
 <td><code>ratelimit</code></td>
 <td>a sliding-window limiter per client</td>
-<td>the rule &quot;at most N requests in any window&quot; as the model, a sweep that forgets clients too early</td>
+<td>the rule &quot;at most N requests in any window&quot; as the model, a sweep that forgets clients too early, a budgeted run whose <code>ReportJSON</code> and <code>Observations</code> files a test reads the way a CI job would</td>
 </tr>
 <tr>
 <td><code>sessions</code></td>
@@ -161,7 +162,7 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 <tr>
 <td><code>ledger</code></td>
 <td>transfers between accounts</td>
-<td>a model next to an audit that checks only the invariants, an overdraft race caught in parallel</td>
+<td>a model next to an audit that checks only the invariants, an overdraft race caught in parallel, <code>Signature</code> and <code>MaxFailures</code> reporting two causes of the audit apart</td>
 </tr>
 </tbody>
 </table>
@@ -184,19 +185,25 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 </span></span><span style="display:flex;"><span>go test ./... -pbt.seed=0x1c3           # repeat a run
 </span></span><span style="display:flex;"><span>go test ./... -pbt.startsize=10 -pbt.maxsize=100
 </span></span><span style="display:flex;"><span>go test ./... -pbt.shrinktime=2m
+</span></span><span style="display:flex;"><span>go test ./... -pbt.checks=1000000 -pbt.budget=30s # time-limited search
 </span></span><span style="display:flex;"><span>go test ./... -pbt.searchsteps=5000     # longer targeted searches
 </span></span><span style="display:flex;"><span>go test ./... -pbt.failures=3           # collect up to three distinct failures
+</span></span><span style="display:flex;"><span>go test ./... -pbt.causality=32         # continuations per sequential prefix
+</span></span><span style="display:flex;"><span>go test ./... -pbt.warnhealth=duplicate # warn about repeated choices
 </span></span><span style="display:flex;"><span>go test ./... -pbt.checkhealth=default  # fail on wasted or oversized input
 </span></span><span style="display:flex;"><span>go test ./... -pbt.ignorehealth=slow    # hide the timing warning
 </span></span><span style="display:flex;"><span>go test ./... -pbt.nosave               # keep testdata/pbt untouched
 </span></span><span style="display:flex;"><span>go test ./... -pbt.replay=testdata/pbt/TestQueue/3f2a… -run TestQueue
 </span></span><span style="display:flex;"><span>go test ./... -pbt.v                    # summaries and shrink steps
+</span></span><span style="display:flex;"><span>go test ./... -pbt.json=runs.jsonl       # one JSON line per run
+</span></span><span style="display:flex;"><span>go test ./... -pbt.observe=observations  # OpenPBTStats files for Tyche
+</span></span><span style="display:flex;"><span>go test -cover -coverpkg=./... ./... -pbt.coverage # guide with live block coverage
 </span></span></code></pre>
 <div class="pager">
 <span>← <a href="10-formats">Standard formats</a></span>
-<span></span>
+<span><a href="12-agents">Testing a project with an agent</a> →</span>
 </div>
-<footer>pbt user guide for pbt v0.4.0 · <a href="https://github.com/ymotongpoo/pbt/tree/main/docs/guide">source</a> · Apache License 2.0</footer>
+<footer>pbt user guide for pbt v0.5.0 · <a href="https://github.com/ymotongpoo/pbt/tree/main/docs/guide">source</a> · Apache License 2.0</footer>
 </main>
 </div>
 </body>

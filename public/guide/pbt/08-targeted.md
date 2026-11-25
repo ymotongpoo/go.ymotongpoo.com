@@ -24,6 +24,8 @@ var walkProperty = func(t *pbt.T) {
 
 A random walk of `n` steps ends about `sqrt(n)` away from the origin, so 100 random walks almost never reach 50. With `t.Maximize("position", pos)`, the run turns into a search once the first case reports a utility. pbt mutates the choices of the best case so far, keeps a mutation when its utility is higher, sometimes keeps a worse one early in the search to escape a local maximum, and occasionally restarts from a fresh case. The search runs for the number of steps set by `SearchSteps` or `-pbt.searchsteps`, 1000 by default, instead of the number of checks.
 
+The report below shortens the list of steps with `…` and omits the reproduction line.
+
 ```text
 [pbt] property failed after 246 passed checks and 2039 shrink steps (size 33)
 [pbt] utility position = 51
@@ -88,6 +90,118 @@ var poolProperty = func(t *pbt.T) {
 ```
 
 The report lists every utility of the failing case. A passing run lists the best value of each objective in its summary. The objectives share the search steps, so give a run with several of them more steps with `SearchSteps`. A property with a single objective searches exactly as before.
+
+## Searching for slow inputs
+
+A performance property can maximize the elapsed duration of the call under test. Draw the input first, record `time.Now()` immediately before the call, then pass `time.Since(start).Seconds()` to `t.Maximize("seconds", elapsed)`. This keeps generation time out of the utility.
+
+Elapsed time is noisy. Scheduling, garbage collection and caches can change it for the same input. Repeat a slow case before treating it as evidence of a performance bug. A deterministic work count often makes a better search objective.
+
+The guide measures comparisons inside a quadratic scan. Inputs with an early duplicate finish quickly; inputs with many distinct values need more comparisons.
+
+```go
+// allDistinct counts the comparisons that this quadratic scan performs.
+func allDistinct(xs []int) (bool, int) {
+	comparisons := 0
+	for i, x := range xs {
+		for _, y := range xs[:i] {
+			comparisons++
+			if x == y {
+				return false, comparisons
+			}
+		}
+	}
+	return true, comparisons
+}
+
+var scanWorkProperty = func(t *pbt.T) {
+	xs := pbt.SliceOfN(pbt.IntRange(0, 9), 0, 10).Draw(t, "xs")
+	_, comparisons := allDistinct(xs)
+	t.Maximize("comparisons", float64(comparisons))
+	if comparisons > 20 {
+		t.Fatalf("scan used %d comparisons, limit 20", comparisons)
+	}
+}
+```
+
+`TestSearchFindsExpensiveScan` runs this property with `Seed(1)`. Its report is:
+
+```text
+[pbt] property failed after 194 passed checks and 213 shrink steps (size 42)
+[pbt] utility comparisons = 21
+[pbt] xs (SliceOfN(IntRange(0, 9), 0, 10)) = []int{0, 1, 2, 3, 5, 4, 4}
+[pbt] error: scan used 21 comparisons, limit 20
+[pbt] reproduce: go test -run 'TestScanWork' -pbt.seed=0x1
+```
+
+Elapsed time works the same way in a real project: maximize the measured duration and assert the acceptable bound. `Maximize` alone does not fail a case. A passing search reports its best utility but saves no counterexample. The bound makes a slow case fail so that normal runs shrink and save it. The guide's test uses `NoSave` through its recorder to avoid writing the planted failure into the suite.
+
+## Searching with code coverage
+
+`CoverageGuided()` or `-pbt.coverage` enables an experimental search based on `testing.Coverage`. It is off by default. Build with `go test -cover`, and use `-coverpkg` to select the packages whose coverage matters. Without instrumentation, pbt logs a hint and uses ordinary search.
+
+Passing generated cases that increase live block coverage enter a pool of up to 64 seeds. Cases without choices cannot seed mutations. Once the pool has a seed, attempts alternate between a fresh case and a mutation of a randomly selected seed. The pool drops the oldest seed when full and lasts for one `Check` call. Mutations use the seed's size and count toward `Checks` like fresh cases.
+
+This can help with deep chains of comparisons. A case that passes one more comparison reaches another block and can seed attempts at the next comparison. The example recognizes a four-byte header:
+
+```go
+// This function lives in a .go file: go test does not instrument _test.go files.
+func recognizesHeader(b []byte) bool {
+	if len(b) == 4 {
+		if b[0] == 'P' {
+			if b[1] == 'B' {
+				if b[2] == 'T' {
+					if b[3] == '!' {
+						return true
+					}
+				}
+			}
+		}
+	}
+	return false
+}
+```
+
+```go
+func TestCoverageGuidedHeader(t *testing.T) {
+	if testing.CoverMode() == "" {
+		t.Skip("run with -cover -coverpkg=go.ymotongpoo.com/pbt/docs/guide/snippets")
+	}
+	property := func(t *pbt.T) {
+		b := pbt.SliceOfN(pbt.SampledFrom([]byte("PBT!?")), 4, 4).Draw(t, "header")
+		if got := recognizesHeader(b); got != (string(b) == "PBT!") {
+			t.Fatalf("header %q: accepted=%t", b, got)
+		}
+	}
+	logs := passingLogs(t, "TestHeader", property, pbt.Seed(1),
+		pbt.Checks(200), pbt.CoverageGuided(), pbt.Verbose())
+	mustContain(t, logs, "[pbt] coverage-guided:", "of 200 passing cases", "seeds kept")
+}
+```
+
+The fixture lives in `coverage_fixture.go`, because Go does not instrument `_test.go` files. The test skips itself when the binary has no instrumentation. Run it alone from the repository root:
+
+```sh
+go test -count=1 -v -cover -coverpkg=go.ymotongpoo.com/pbt/docs/guide/snippets ./docs/guide/snippets -run '^TestCoverageGuidedHeader$'
+```
+
+The captured output includes:
+
+```text
+[pbt] coverage-guided: 4 of 200 passing cases reached new code, 4 seeds kept, coverage 0.0% -> 60.0%
+[pbt] OK, passed 200 checks (seed 0x1)
+```
+
+The percentages are the live estimate from `testing.Coverage`. They differ from the statement-weighted percentage that `go test` prints at the end. Compiler instrumentation and earlier tests can change the output, so the test checks the report's shape rather than fixed percentages.
+
+Coverage guidance has limits:
+
+- Counters cover the whole process. Earlier tests can exhaust the useful signal, while parallel tests and other goroutines can attribute unrelated coverage to a case.
+- The signal describes covered blocks, without edges or execution counts. Comparisons within an already covered block give no new signal.
+- Each reading scans the counters, so its cost grows with the instrumented code. Select the packages under test; instrumenting pbt also includes its own work in the signal.
+- A seed alone cannot repeat the schedule across different coverage histories. Saved counterexamples still replay their choices normally.
+
+Run a property alone when using this signal, and avoid `t.Parallel`. `Maximize` or `Minimize` takes priority once targeted search starts, with its own `SearchSteps` limit. `CheckExists` ignores coverage guidance.
 
 ## Existence
 

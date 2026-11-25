@@ -1,4 +1,4 @@
-# pbt user guide (v0.4.0)
+# pbt user guide (v0.5.0)
 
 > The user guide of pbt, a property-based testing library for Go, in one file. The index of the documentation is https://go.ymotongpoo.com/pbt/guide/llms.txt.
 
@@ -8,12 +8,12 @@
 
 pbt is a property-based testing library for Go. A property is a test that must hold for every input of some shape. pbt generates the inputs, shrinks a failing one to a small case, and saves that case so that the next `go test` run replays it. The feature set follows Erlang's [PropEr](https://proper-testing.github.io/): generators whose distribution you control, statistics to check that control, stateful and parallel command testing, state machines, targeted search, and existential properties.
 
-This guide describes pbt v0.3.3. It assumes that you write tests with `go test`. The [package documentation](https://pkg.go.dev/go.ymotongpoo.com/pbt) is the reference for every function; the chapters here explain how the pieces fit together and which one to reach for.
+This guide describes pbt v0.5.0. It assumes that you write tests with `go test`. The [package documentation](https://pkg.go.dev/go.ymotongpoo.com/pbt) is the reference for every function; the chapters here explain how the pieces fit together and which one to reach for.
 
 ## Install
 
 ```sh
-go get go.ymotongpoo.com/pbt@v0.3.3
+go get go.ymotongpoo.com/pbt@v0.5.0
 ```
 
 pbt needs Go 1.25 or later and has no dependencies outside the standard library. Import it as `go.ymotongpoo.com/pbt`.
@@ -76,13 +76,12 @@ var biggestProperty = func(t *pbt.T) {
 }
 ```
 
-A run of `pbt.Check(t, biggestProperty)` fails with this report.
+The guide's test runs `biggestProperty` with `Seed(1)` and `NoSave()` to capture this report:
 
 ```text
 [pbt] property failed after 12 passed checks and 20 shrink steps (size 13)
 [pbt] xs (SliceOfN(Int(), 1, -1)) = []int{-1}
 [pbt] error: biggest([-1]) = 0, want -1
-[pbt] saved to testdata/pbt/TestBiggest/5a0c…; go test replays it until the file is deleted
 [pbt] reproduce: go test -run 'TestBiggest' -pbt.seed=0x1
 ```
 
@@ -91,12 +90,13 @@ Read it line by line.
 - The first line says how many cases passed before the failure, and how many shrink steps it took to reach the case shown. The failing case was found at size 13.
 - Every value the property drew is listed with its label, its generator and its value. The slice that failed first had 13 elements; the shrinker removed all but one and reduced that one to the smallest negative number. `[-1]` is the smallest input that still fails.
 - The `error:` line is the message passed to `Fatalf`. Log lines, panics and the output of `OnFail` callbacks appear here as well.
-- The case was saved under `testdata/pbt`, in a directory named after the test. The next `go test` replays it before generating anything new, so the bug stays visible until it is fixed, and the file is yours to delete or to keep as a regression case.
 - The last line is the command that reproduces the run, seed included.
+
+Without `NoSave`, pbt also saves the case under `testdata/pbt`, in a directory named after the test. The next run replays it before generating new cases. Keep that file as a regression case after fixing the bug.
 
 ## What the rest of the guide covers
 
-The chapters build on each other. Chapters 1 to 4 cover generators, the size and distribution of the data, shrinking, and the options of a run. Chapters 5 to 7 cover stateful testing against a model, parallel execution and state machines. Chapter 8 covers targeted search and existential properties, and chapter 9 the generators derived from types. Chapter 10 covers the strings in the formats that standards define. Chapter 11 points to the examples, the migration guide for rapid users and the reference material.
+The chapters build on each other. Chapters 1 to 4 cover generators, the size and distribution of the data, shrinking, and the options of a run. Chapters 5 to 7 cover stateful testing against a model, parallel execution and state machines. Chapter 8 covers targeted search and existential properties, and chapter 9 the generators derived from types. Chapter 10 covers the strings in the formats that standards define. Chapter 11 points to the examples, the migration guide for rapid users and the reference material. [Chapter 12](12-agents.md) gives coding agents a method for testing a project, from choosing properties to reporting a reproducible bug.
 
 ---
 
@@ -394,13 +394,15 @@ The run stopped after 125 cases, once the interval excluded 30%. The observed sh
 
 ## Health checks
 
-Statistics answer the questions you ask. Health checks answer the ones you might not think of: whether the run spends its cases well. `Check` watches every run and warns about three problems with the input.
+Statistics answer the questions you ask. Health checks answer the ones you might not think of: whether the run spends its cases well. `Check` watches every run and warns about wasted input, expensive generation and changes to saved inputs. An optional check also detects repeated choices.
 
 | Check | Warns when |
 | --- | --- |
 | `HealthFilter` | half of the cases, and at least 20, are discarded by `Assume`, `Skip` or a `Filter` that gave up; or a `Filter` rejects nine values in ten over at least 100 |
 | `HealthLarge` | a fifth of the cases draw more than 10,000 choices |
 | `HealthSlow` | drawing the values takes 10 ms per case and a second in all, not counting the property's own work |
+| `HealthStale` | a saved case's draw comments differ from the draws produced by replay; warns by default |
+| `HealthDuplicate` | fewer than half the inputs have distinct choice sequences over at least 20 non-discarded random cases; off by default |
 
 A property that keeps only long strings shows the first one.
 
@@ -422,7 +424,32 @@ var longNameProperty = func(t *pbt.T) {
 
 The run passed, but it ran 729 cases to get its 100, and the warning names the line that threw the rest away. A generator that builds long strings, `StringN(8, 40)`, removes the waste. The warning names the busiest sources: the description of a `Filter`, or the line of an `Assume` or a `Skip`. `HealthLarge` names the draws that consumed the most choices.
 
-Health checks warn by default, the way `Cover` does, and the run passes. `CheckHealth()` makes `HealthFilter` and `HealthLarge` fail a passing run. `CheckHealth(HealthSlow)` adds the timing check, which is left out by default because a loaded CI machine can trip it. `IgnoreHealth(checks...)` hides a check and wins over `CheckHealth`. The flags `-pbt.checkhealth` and `-pbt.ignorehealth` take the same names for every `Check` of a `go test` run, for example `-pbt.checkhealth=default,slow`. Two more checks, `HealthFlaky` and `HealthShrink`, apply to failing runs; chapter 3 describes them.
+All health checks except `HealthDuplicate` warn by default, the way `Cover` does, and the run passes. `CheckHealth()` makes `HealthFilter` and `HealthLarge` fail a passing run. `CheckHealth(HealthSlow)` adds the timing check, which is left out by default because a loaded CI machine can trip it. `CheckHealth(HealthStale)` makes stale replay fail a passing run; `CheckHealth()` leaves it as a warning because generators can change intentionally. `IgnoreHealth(checks...)` hides a check and wins over both `CheckHealth` and `WarnHealth`.
+
+The flags `-pbt.checkhealth` and `-pbt.ignorehealth` take the same names for every `Check` of a `go test` run, for example `-pbt.checkhealth=default,slow`. Two more checks, `HealthFlaky` and `HealthShrink`, apply to failing runs; chapter 3 describes them.
+
+`HealthStale` means that the same saved choices now describe different draw text. It does not mean that a fixed bug still fails. The warning identifies the file and the first changed draw. [Chapter 4](04-properties.md#seeds-saved-cases-and-replay) explains what to inspect before trusting the replay.
+
+`WarnHealth(HealthDuplicate)` or `-pbt.warnhealth=duplicate` enables the duplicate warning. `CheckHealth(HealthDuplicate)` enables it as an error. `WarnHealth()` with no arguments changes nothing. Health flags and options add up; `WarnHealth` cannot downgrade a check that `CheckHealth` makes an error.
+
+```go
+func checkSwitch(tb pbt.TB) {
+	pbt.Check(tb, func(t *pbt.T) {
+		enabled := pbt.Bool().Draw(t, "enabled")
+		t.Classify(enabled, "enabled")
+	}, pbt.Seed(1), pbt.Checks(20), pbt.WarnHealth(pbt.HealthDuplicate))
+}
+```
+
+The Boolean domain has only two values. This run intentionally repeats them:
+
+```text
+[pbt] health: HealthDuplicate: only 2 of 20 generated inputs were distinct by their choices; possible causes include a small domain such as Bool or SampledFrom, a low maximum size, or more Checks than the input space has values (CheckHealth(HealthDuplicate) makes this fail; IgnoreHealth(HealthDuplicate) hides it)
+```
+
+`HealthDuplicate` counts passing and failing cases from ordinary random generation. It excludes discards, saved-case replay, shrinking and targeted search. Coverage-guided mutations also do not count. The key hashes the consumed choices, without the size. Sizes grow during a run, so including size would hide repeated choices in most early cases.
+
+This count is a proxy for distinct values. Different choices can map to the same value, and values derived only from size can count as duplicates. Tracking stops after more than 4096 distinct keys. A small domain can be intentional, which is why this check needs an explicit option.
 
 ---
 
@@ -574,6 +601,44 @@ var discountProperty = func(t *pbt.T) {
 
 Suppose the first failing case is a quantity of 3000, which panics. Without the rule, the shrinker would lower the quantity past 1000, find that 101 fails the assertion, and report a wrong discount; the panic would be gone from the report. With the rule, the quantity shrinks to 1001 and the report shows the panic. When the first failure is the wrong discount, the case shrinks to 101 instead. Either way, the report describes the bug the run found. A stateful test keys its failures by command and check, so a failing postcondition of one command cannot turn into the panic of another.
 
+One assertion site can cover several causes. `t.Signature(name)` assigns a stable name to the cause for the current case. This version of the [port property in chapter 4](04-properties.md#several-failures-in-one-run) uses one `Fatalf` for both bugs:
+
+```go
+// parsePort is the parser with two bugs from chapter 4.
+var namedPortProperty = func(t *pbt.T) {
+	s := pbt.StringOf(pbt.SampledFrom([]rune("0123456789"))).Draw(t, "s")
+	_, accepted := parsePort(s)
+	want := validPort(s)
+	if accepted != want {
+		cause := "rejected valid port"
+		if accepted {
+			cause = "accepted invalid port"
+		}
+		t.Signature(cause)
+		t.Fatalf("parsePort(%q): %s", s, cause)
+	}
+}
+```
+
+Running it with `Seed(1)` and `MaxFailures(2)` produces:
+
+```text
+[pbt] failure 1 of 2: property failed after 6 passed checks and 9 shrink steps (size 4)
+[pbt] failure was named "accepted invalid port"
+[pbt] s (StringOf(SampledFrom(10 values))) = "0"
+[pbt] error: parsePort("0"): accepted invalid port
+[pbt] reproduce: go test -run 'TestNamedPort' -pbt.seed=0x1 -pbt.failures=2
+[pbt] failure 2 of 2: property failed after 6 passed checks and 90 shrink steps (size 8)
+[pbt] failure was named "rejected valid port"
+[pbt] s (StringOf(SampledFrom(10 values))) = "7000"
+[pbt] error: parsePort("7000"): rejected valid port
+[pbt] reproduce: go test -run 'TestNamedPort' -pbt.seed=0x1 -pbt.failures=2
+```
+
+The name replaces the assertion site, panic type and site, or stateful command check as the failure identity. Shrinking keeps that name, and `MaxFailures` counts different names as different failures. The same identity determines saved-file suffixes when collecting several failures and the replay comparison for `HealthFlaky`.
+
+Choose names for causes, without generated values. Otherwise each value can become a separate failure and prevent shrinking. Without `Signature`, the automatic identity still applies. A call before or after a failure works; the last call wins, including deferred calls and cleanup callbacks. `Conjunction` shares one case, so a signature in any member names the whole case. A passing case ignores the name.
+
 ## When a failure does not recur
 
 Before shrinking, `Check` replays the failing case once with the same choices. A property that depends only on its input fails again, in the same way. The replay can pass, discard the case or fail at another place. Then the property or a generator depends on something besides the choices, such as a clock, a global variable or the order of goroutines. The report then carries a `HealthFlaky` note.
@@ -620,8 +685,13 @@ Most settings have a flag for the whole `go test` run and an option for one `Che
 | `-pbt.checks` | `Checks(n)` | 100 | passing cases required |
 | `-pbt.seed` | `Seed(s)` | random | seed of the run, printed in every report |
 | `-pbt.startsize`, `-pbt.maxsize` | `Sizes(start, max)` | 1, 42 | size of the first case and the size the cases grow to |
+| `-pbt.budget` | `Budget(d)` | 0 (unlimited) | elapsed time allowed for search, excluding replay and shrinking |
 | `-pbt.shrinktime` | `ShrinkTime(d)` | 30s | time budget for shrinking one failure |
 | `-pbt.failures` | `MaxFailures(n)` | 1 | distinct failures to collect, shrink and report |
+| `-pbt.causality` | `Causality(n)` | 0 (off) | continuations per prefix to locate a possible cause in a sequential program (chapter 5) |
+| `-pbt.coverage` | `CoverageGuided()` | false | use live block coverage to guide search (chapter 8) |
+| `-pbt.json` | `ReportJSON(path)` | empty (off) | append one JSON report per run |
+| `-pbt.observe` | `Observations(dir)` | empty (off) | append OpenPBTStats records, one file per test |
 | `-pbt.searchsteps` | `SearchSteps(n)` | 1000 | cases of a targeted search |
 | `-pbt.nosave` | `NoSave()` | false | do not save failing cases |
 | `-pbt.replay` | `ReplayFile(path)` | none | a saved case to replay before searching |
@@ -630,6 +700,7 @@ Most settings have a flag for the whole `go test` run and an option for one `Che
 | | `NoReplay()` | false | skip the saved cases |
 | | `Setup(f)` | none | run `f` before every case |
 | | `CheckCoverage()` | false | fail on an unmet or undecided `Cover` requirement |
+| `-pbt.warnhealth` | `WarnHealth(checks...)` | none | enable optional health warnings, currently `HealthDuplicate` |
 | `-pbt.checkhealth` | `CheckHealth(checks...)` | none | health checks that fail a passing run (chapter 2) |
 | `-pbt.ignorehealth` | `IgnoreHealth(checks...)` | none | health checks to hide |
 | | `ReportLimit(chars)`, `ReportDepth(levels)` | 2000, 3 | size of a reported value and depth of nested draws |
@@ -660,6 +731,26 @@ var TestReverseTwice = pbt.MakeCheck(func(t *pbt.T) {
 ```
 
 `MakeCheck` wraps a property as a `func(*testing.T)`, which is convenient for a table of properties or for a subtest.
+
+## Time budgets
+
+`Budget(d)` or `-pbt.budget=d` limits the elapsed search time. The default, zero, leaves search unlimited by time. The clock starts after saved-case replay. pbt checks it before each new case, including discarded cases, targeted search steps and extended `CheckCoverage` runs.
+
+The case limit still applies, so `Budget` does not promise a minimum runtime. Raise `Checks` to run for roughly the requested duration. For a property that calls `Maximize` or `Minimize`, raise `SearchSteps` instead.
+
+```sh
+go test -count=1 -run '^TestQueue$' -pbt.checks=1000000 -pbt.budget=30s
+```
+
+A running case finishes before the budget takes effect. Use `go test -timeout` for a property that can hang. Replay and shrinking fall outside this budget; `ShrinkTime` separately bounds shrinking each failure or witness.
+
+A `Check` can pass with fewer than `Checks` cases when time runs out. Collected failures still fail, shrink and appear in the report. Enabled health checks and `CheckCoverage` can also fail the run; an undecided coverage requirement remains a failure. `CheckExists` fails if it finds no witness.
+
+A passing run that exhausts its budget always prints a summary, even without `Verbose`. `TestSearchBudget` uses `testing/synctest` to run three one-second cases without a real wait:
+
+```text
+[pbt] OK, passed 3 checks in the 3s budget (seed 0x1)
+```
 
 ## Discarding cases
 
@@ -829,13 +920,62 @@ var portProperty = func(t *pbt.T) {
 [pbt] reproduce: go test -run 'TestPort' -pbt.seed=0x1 -pbt.failures=2
 ```
 
-Two failures are different when they fail at different lines, or panic with different types or at different places. That is the same identity that keeps a shrink on one bug (chapter 3). A failure that the shrinker meets on the way, failing in a new way, becomes one of the `n` as well. Each failure gets the full `ShrinkTime` budget. The second minimum, 7000, is a local one. The true boundary is 6554, but the path to it needs a larger digit in a later place, and the shrinker does not try that. Saved failures replay together, and a run that replays a failing saved case does not search for more. `CheckExists` ignores the option.
+By default, two failures are different when they fail at different lines, or panic with different types or at different places. That is the same identity that keeps a shrink on one bug (chapter 3). A failure that the shrinker meets on the way, failing in a new way, becomes one of the `n` as well. Each failure gets the full `ShrinkTime` budget. The second minimum, 7000, is a local one. The true boundary is 6554, but the path to it needs a larger digit in a later place, and the shrinker does not try that. Saved failures replay together, and a run that replays a failing saved case does not search for more. `CheckExists` ignores the option.
+
+When several causes share one assertion, call `t.Signature` with a stable name for each cause. `MaxFailures` then collects the names separately, even though every failure reaches the same line. The [named port example in chapter 3](03-shrinking.md#the-failure-stays-the-same) separates an invalid port that the parser accepts from a valid port that it rejects.
 
 ## Seeds, saved cases and replay
 
 Every report ends with a `reproduce:` line that carries the seed of the run. Passing that seed with `-pbt.seed` repeats the same sequence of cases, including the failing one, on the same version of both the property code and pbt. Updating pbt can change the generated cases for a seed. In v0.3.2 the integer generation fix changes some seeded runs. In v0.4.0, `Make` generates different values for some recursive types, and the shrinker can reach other, smaller cases. A saved case replays its choices through the generators of the installed version. After an upgrade, a saved case of a property that uses `Make` on a recursive type can produce a different value.
 
-The failing case is also saved under `testdata/pbt/<TestName>/<hash>` as a text file with the size, the drawn values as comments, and the choices. Every later `Check` of the same test replays the saved cases before generating new ones and fails if one still fails, so the regression case follows the code into version control. Delete the file to drop the case. Three options adjust this behavior: `NoSave` keeps a run from writing, `NoReplay` skips the saved cases, and `ReplayFile` or `-pbt.replay=FILE` replays one saved file in any test, which is how you hand a case from one test to another or reproduce a failure from a CI log.
+The failing case is also saved under `testdata/pbt/<TestName>/<hash>` as a text file with the size, the drawn values as comments, and the choices. Every later `Check` of the same test replays the saved cases before generating new ones and fails if one still fails, so the regression case follows the code into version control. Keep the file as a regression case after fixing the bug. Removing it drops that replay; do not delete it just to make a run pass. Three options adjust this behavior: `NoSave` keeps a run from writing, `NoReplay` skips the saved cases, and `ReplayFile` or `-pbt.replay=FILE` replays one saved file in any test, which is how you hand a case from one test to another or reproduce a failure from a CI log.
+
+`HealthStale` warns by default when saved draw comments differ from the current replay's draws. A changed generator can turn the same choices into another input. Compare the warning's saved and current text, then test the original value explicitly if it still matters. A passing stale replay does not establish that the original regression is fixed.
+
+The comparison uses rendered text, not deep equality. Truncation can hide changes, and pbt skips draws with unstable representations such as pointers or custom formatters. `CheckHealth(HealthStale)` or `-pbt.checkhealth=stale` makes the warning fail a passing run. `IgnoreHealth(HealthStale)` hides it. Replay does not rewrite the saved comments.
+
+## Machine-readable output
+
+`ReportJSON(path)` or `-pbt.json=path` appends one JSON line after each `Check` or `CheckExists`. The default empty path disables output. Create the parent directory first. The schema name is `go.ymotongpoo.com/pbt/report/v1`; readers should ignore unknown fields.
+
+| Fields | Contents |
+| --- | --- |
+| `test`, `seed`, `kind`, `status`, `errors` | test name, hexadecimal seed, `check` or `exists`, outcome and error messages |
+| `checks_passed`, `rejected`, `discards` | search counts, excluding replay and shrinking; `rejected` counts failing candidates |
+| `budget_exhausted`, `durations_seconds` | whether time ended the search, plus total, search and shrink durations |
+| `failures`, `witness` | failure identities, rendered draws, saved paths and reproduction commands; `witness` appears only after successful `CheckExists` |
+| `health`, `statistics`, `objectives` | diagnostics, labels, coverage requirements, measurements and best utilities |
+
+`status` is `passed`, `failed`, `gave_up`, `no_witness` or `error`. Draw values are rendered strings and follow `ReportLimit` and `ReportDepth`. Non-finite numbers use the strings `NaN`, `+Inf` and `-Inf`.
+
+```go
+func checkRecordedRun(tb pbt.TB, reportPath, observationDir string) {
+	pbt.Check(tb, func(t *pbt.T) {
+		n := pbt.IntRange(0, 9).Draw(t, "n")
+		t.Classify(n%2 == 0, "even")
+		if n < 0 || n > 9 {
+			t.Fatalf("out of range: %d", n)
+		}
+	}, pbt.Seed(1), pbt.Checks(3),
+		pbt.ReportJSON(reportPath), pbt.Observations(observationDir))
+}
+```
+
+`TestMachineReadableOutput` checks both files. This is its JSON report with durations, statistics and empty collections omitted; all shown fields retain their captured values:
+
+```json
+{"schema":"go.ymotongpoo.com/pbt/report/v1","test":"TestRecordedRun","seed":"0x1","kind":"check","status":"passed","checks_passed":3,"rejected":0,"discards":0,"budget_exhausted":false}
+```
+
+`Observations(dir)` or `-pbt.observe=dir` appends OpenPBTStats records that Tyche reads. The default empty directory disables observations. pbt creates the directory and writes one file per sanitized test name, such as `observations/TestRecordedRun.jsonl`. Subtest names create subdirectories. Sanitized names can collide; `property` and `run_start` distinguish records in a shared file.
+
+Each `test_case` record includes the input, outcome, generation phase, features and timings. Features include labels, measurements, coverage-requirement hits and target utilities. Timings separate input generation from test execution. Replay and shrink attempts also produce records. A `minimal` record with `metadata.final=true` is a snapshot, not another execution. An `info` record ends the run. The `coverage` field is currently null, even with `CoverageGuided`.
+
+```sh
+go test -count=1 ./... -pbt.json=runs.jsonl -pbt.observe=observations
+```
+
+A log shipper can tail these files and forward records or derived counts to a log or metrics backend. pbt writes files locally and does not send them over the network. Observations use buffering and flush at the end of a run; abrupt termination can lose buffered records. A write error fails the test, because the requested output was not delivered.
 
 ---
 
@@ -995,6 +1135,74 @@ The report shows the program, the history of the run and the model state before 
 ```
 
 The first failing sequence had several issues and closes. The shrinker removed commands one by one, regenerating the following commands from the new model state and checking their preconditions, until three remained: the shortest program that shows the leak. The failure is keyed by the check and the command, "postcondition of open", so shrinking does not trade it for a different failure.
+
+## Finding the step that caused a failure
+
+The command that detects a failure can run long after the command that caused it. `Causality(n)` or `-pbt.causality=n` samples continuations of the first failing program before shrinking. The default, zero, disables this analysis.
+
+For each sampled prefix, pbt keeps the choices through its last command and generates `n` fresh continuations at the original size. The report gives the fraction that fail with the original failure identity. Discarded continuations do not enter that fraction. A rise suggests that a command in the retained prefix made the failure more likely.
+
+This property loses a value during `write(7)`, then detects the loss in `read()` after four unrelated commands:
+
+```go
+var delayedWriteProperty = func(t *pbt.T) {
+	step, want, stored := 0, 0, 0
+	init := func() { step, want = 0, 0 }
+	next := func(pbt.Var) { step++ }
+	gen := func() pbt.CommandGen {
+		switch step {
+		case 0:
+			return pbt.Map(pbt.IntRange(0, 15), func(value int) pbt.Command {
+				return pbt.Command{
+					Name: "write", Args: []any{value},
+					Run: func(pbt.Env) any {
+						stored = value
+						if value == 7 {
+							stored = 0 // planted bug: this write loses its value
+						}
+						return nil
+					},
+					Next: func(pbt.Var) { want = value; step++ },
+				}
+			})
+		case 5:
+			return pbt.Just(pbt.Command{
+				Name: "read", Next: next,
+				Run: func(pbt.Env) any { return stored },
+				Post: func(_ pbt.Env, result any) error {
+					if result.(int) != want {
+						return fmt.Errorf("read %d, want %d", result, want)
+					}
+					return nil
+				},
+			})
+		default:
+			return pbt.Just(pbt.Command{Name: "wait", Next: next})
+		}
+	}
+	pbt.Commands(init, gen, pbt.Length(6, 6)).Draw(t, "program").RunSequential(t)
+}
+```
+
+`TestCausalityFindsEarlyWrite` runs it with `Seed(1)` and `Causality(32)`. The report contains these lines; the program, history and later prefix rates are omitted here:
+
+```text
+[pbt] property failed after 38 passed checks and 16 shrink steps (size 39)
+[pbt] error: step 6: postcondition of read() failed: read 0, want 7
+[pbt] reproduce: go test -run 'TestDelayedWrite' -pbt.seed=0x1
+[pbt] causality (32 continuations per prefix, seed 0x1):
+[pbt]   steps are generated commands of the first failing case, before shrinking in this run
+[pbt]   after 0 of 6 steps: 0/32 fail with the same identity
+[pbt]   after 1 of 6 steps: 32/32 fail with the same identity <- largest measured rise at step 1: write(7)
+```
+
+Keeping the first command makes every sampled continuation fail, although the postcondition fails at step 6. Here `Length(6, 6)` preserves the delayed check during shrinking. In a variable-length program, shrinking can remove commands and change step numbers. The causality report refers to the first failing program before that shrink.
+
+Analysis costs at most `16*n` extra property executions, beyond the usual stability replay. It samples up to eight spaced prefixes and bisects the largest measured rise up to eight times. These executions run setup and cleanup, so reset the system for every property invocation. They do not count toward checks or statistics, call `OnFail`, or save cases.
+
+The analysis applies to sequential `Commands` programs, including `fsm.Commands`. It skips parallel programs because generation order is not execution order. It also skips a failure that the stability replay cannot reproduce. `MaxFailures` analyzes only the first failure; `CheckExists` ignores the option. For a saved case, pbt analyzes the replayed program, since the original unshrunk program is unavailable.
+
+A rise identifies a candidate cause, not proof. Sampling noise can hide a rise, rates can fall again, and a long trace may leave only a range of candidate steps.
 
 ## Writing good models
 
@@ -1197,6 +1405,8 @@ var walkProperty = func(t *pbt.T) {
 
 A random walk of `n` steps ends about `sqrt(n)` away from the origin, so 100 random walks almost never reach 50. With `t.Maximize("position", pos)`, the run turns into a search once the first case reports a utility. pbt mutates the choices of the best case so far, keeps a mutation when its utility is higher, sometimes keeps a worse one early in the search to escape a local maximum, and occasionally restarts from a fresh case. The search runs for the number of steps set by `SearchSteps` or `-pbt.searchsteps`, 1000 by default, instead of the number of checks.
 
+The report below shortens the list of steps with `…` and omits the reproduction line.
+
 ```text
 [pbt] property failed after 246 passed checks and 2039 shrink steps (size 33)
 [pbt] utility position = 51
@@ -1261,6 +1471,118 @@ var poolProperty = func(t *pbt.T) {
 ```
 
 The report lists every utility of the failing case. A passing run lists the best value of each objective in its summary. The objectives share the search steps, so give a run with several of them more steps with `SearchSteps`. A property with a single objective searches exactly as before.
+
+## Searching for slow inputs
+
+A performance property can maximize the elapsed duration of the call under test. Draw the input first, record `time.Now()` immediately before the call, then pass `time.Since(start).Seconds()` to `t.Maximize("seconds", elapsed)`. This keeps generation time out of the utility.
+
+Elapsed time is noisy. Scheduling, garbage collection and caches can change it for the same input. Repeat a slow case before treating it as evidence of a performance bug. A deterministic work count often makes a better search objective.
+
+The guide measures comparisons inside a quadratic scan. Inputs with an early duplicate finish quickly; inputs with many distinct values need more comparisons.
+
+```go
+// allDistinct counts the comparisons that this quadratic scan performs.
+func allDistinct(xs []int) (bool, int) {
+	comparisons := 0
+	for i, x := range xs {
+		for _, y := range xs[:i] {
+			comparisons++
+			if x == y {
+				return false, comparisons
+			}
+		}
+	}
+	return true, comparisons
+}
+
+var scanWorkProperty = func(t *pbt.T) {
+	xs := pbt.SliceOfN(pbt.IntRange(0, 9), 0, 10).Draw(t, "xs")
+	_, comparisons := allDistinct(xs)
+	t.Maximize("comparisons", float64(comparisons))
+	if comparisons > 20 {
+		t.Fatalf("scan used %d comparisons, limit 20", comparisons)
+	}
+}
+```
+
+`TestSearchFindsExpensiveScan` runs this property with `Seed(1)`. Its report is:
+
+```text
+[pbt] property failed after 194 passed checks and 213 shrink steps (size 42)
+[pbt] utility comparisons = 21
+[pbt] xs (SliceOfN(IntRange(0, 9), 0, 10)) = []int{0, 1, 2, 3, 5, 4, 4}
+[pbt] error: scan used 21 comparisons, limit 20
+[pbt] reproduce: go test -run 'TestScanWork' -pbt.seed=0x1
+```
+
+Elapsed time works the same way in a real project: maximize the measured duration and assert the acceptable bound. `Maximize` alone does not fail a case. A passing search reports its best utility but saves no counterexample. The bound makes a slow case fail so that normal runs shrink and save it. The guide's test uses `NoSave` through its recorder to avoid writing the planted failure into the suite.
+
+## Searching with code coverage
+
+`CoverageGuided()` or `-pbt.coverage` enables an experimental search based on `testing.Coverage`. It is off by default. Build with `go test -cover`, and use `-coverpkg` to select the packages whose coverage matters. Without instrumentation, pbt logs a hint and uses ordinary search.
+
+Passing generated cases that increase live block coverage enter a pool of up to 64 seeds. Cases without choices cannot seed mutations. Once the pool has a seed, attempts alternate between a fresh case and a mutation of a randomly selected seed. The pool drops the oldest seed when full and lasts for one `Check` call. Mutations use the seed's size and count toward `Checks` like fresh cases.
+
+This can help with deep chains of comparisons. A case that passes one more comparison reaches another block and can seed attempts at the next comparison. The example recognizes a four-byte header:
+
+```go
+// This function lives in a .go file: go test does not instrument _test.go files.
+func recognizesHeader(b []byte) bool {
+	if len(b) == 4 {
+		if b[0] == 'P' {
+			if b[1] == 'B' {
+				if b[2] == 'T' {
+					if b[3] == '!' {
+						return true
+					}
+				}
+			}
+		}
+	}
+	return false
+}
+```
+
+```go
+func TestCoverageGuidedHeader(t *testing.T) {
+	if testing.CoverMode() == "" {
+		t.Skip("run with -cover -coverpkg=go.ymotongpoo.com/pbt/docs/guide/snippets")
+	}
+	property := func(t *pbt.T) {
+		b := pbt.SliceOfN(pbt.SampledFrom([]byte("PBT!?")), 4, 4).Draw(t, "header")
+		if got := recognizesHeader(b); got != (string(b) == "PBT!") {
+			t.Fatalf("header %q: accepted=%t", b, got)
+		}
+	}
+	logs := passingLogs(t, "TestHeader", property, pbt.Seed(1),
+		pbt.Checks(200), pbt.CoverageGuided(), pbt.Verbose())
+	mustContain(t, logs, "[pbt] coverage-guided:", "of 200 passing cases", "seeds kept")
+}
+```
+
+The fixture lives in `coverage_fixture.go`, because Go does not instrument `_test.go` files. The test skips itself when the binary has no instrumentation. Run it alone from the repository root:
+
+```sh
+go test -count=1 -v -cover -coverpkg=go.ymotongpoo.com/pbt/docs/guide/snippets ./docs/guide/snippets -run '^TestCoverageGuidedHeader$'
+```
+
+The captured output includes:
+
+```text
+[pbt] coverage-guided: 4 of 200 passing cases reached new code, 4 seeds kept, coverage 0.0% -> 60.0%
+[pbt] OK, passed 200 checks (seed 0x1)
+```
+
+The percentages are the live estimate from `testing.Coverage`. They differ from the statement-weighted percentage that `go test` prints at the end. Compiler instrumentation and earlier tests can change the output, so the test checks the report's shape rather than fixed percentages.
+
+Coverage guidance has limits:
+
+- Counters cover the whole process. Earlier tests can exhaust the useful signal, while parallel tests and other goroutines can attribute unrelated coverage to a case.
+- The signal describes covered blocks, without edges or execution counts. Comparisons within an already covered block give no new signal.
+- Each reading scans the counters, so its cost grows with the instrumented code. Select the packages under test; instrumenting pbt also includes its own work in the signal.
+- A seed alone cannot repeat the schedule across different coverage histories. Saved counterexamples still replay their choices normally.
+
+Run a property alone when using this signal, and avoid `t.Parallel`. `Maximize` or `Minimize` takes priority once targeted search starts, with its own `SearchSteps` limit. `CheckExists` ignores coverage guidance.
 
 ## Existence
 
@@ -1578,10 +1900,10 @@ The `examples/practical` directory tests small but realistic systems the way a p
 | Package | System | Shows |
 | --- | --- | --- |
 | `httpapi` | a REST API with optimistic concurrency, served by `httptest` | server-assigned ids as `Var`s, status codes as postconditions, a parallel run against a server that allocates ids outside its lock |
-| `jobqueue` | a worker queue with leases, a visibility timeout and dead letters | a fake clock advanced by a command, stale leases kept in the model, an ack that does not check its lease |
-| `ratelimit` | a sliding-window limiter per client | the rule "at most N requests in any window" as the model, a sweep that forgets clients too early |
+| `jobqueue` | a worker queue with leases, a visibility timeout and dead letters | a fake clock advanced by a command, stale leases kept in the model, an ack that does not check its lease, `Causality` on a handoff between two workers |
+| `ratelimit` | a sliding-window limiter per client | the rule "at most N requests in any window" as the model, a sweep that forgets clients too early, a budgeted run whose `ReportJSON` and `Observations` files a test reads the way a CI job would |
 | `sessions` | a session store with expiry, refresh and logout | the `fsm` package with state data and a clock, time as a transition split by where it leads |
-| `ledger` | transfers between accounts | a model next to an audit that checks only the invariants, an overdraft race caught in parallel |
+| `ledger` | transfers between accounts | a model next to an audit that checks only the invariants, an overdraft race caught in parallel, `Signature` and `MaxFailures` reporting two causes of the audit apart |
 
 Run `go test -v -run Caught ./practical/...` inside `examples` to read the reports of the planted bugs. The README of the directory describes the patterns the examples share.
 
@@ -1610,11 +1932,111 @@ go test ./... -pbt.checks=1000          # more cases
 go test ./... -pbt.seed=0x1c3           # repeat a run
 go test ./... -pbt.startsize=10 -pbt.maxsize=100
 go test ./... -pbt.shrinktime=2m
+go test ./... -pbt.checks=1000000 -pbt.budget=30s # time-limited search
 go test ./... -pbt.searchsteps=5000     # longer targeted searches
 go test ./... -pbt.failures=3           # collect up to three distinct failures
+go test ./... -pbt.causality=32         # continuations per sequential prefix
+go test ./... -pbt.warnhealth=duplicate # warn about repeated choices
 go test ./... -pbt.checkhealth=default  # fail on wasted or oversized input
 go test ./... -pbt.ignorehealth=slow    # hide the timing warning
 go test ./... -pbt.nosave               # keep testdata/pbt untouched
 go test ./... -pbt.replay=testdata/pbt/TestQueue/3f2a… -run TestQueue
 go test ./... -pbt.v                    # summaries and shrink steps
+go test ./... -pbt.json=runs.jsonl       # one JSON line per run
+go test ./... -pbt.observe=observations  # OpenPBTStats files for Tyche
+go test -cover -coverpkg=./... ./... -pbt.coverage # guide with live block coverage
 ```
+
+---
+
+# Testing a project with an agent
+
+Start with a small set of properties whose failures would matter to the project. Keep each property, its source of expected behaviour, and its results together. A useful result is a reproducible disagreement with the project's contract, supported by a test that preserves the evidence.
+
+## Establish the contract
+
+Read the documentation, public types, existing tests and fixtures for the code under test. Look for standards that the project promises to follow. These sources define valid inputs, allowed errors and expected results. Record disagreements between them before choosing an oracle.
+
+Basic rules can also supply properties: valid requests should not panic, stored data should not disappear, and operations should finish. State the limits of each rule. For example, a documented panic on invalid input does not violate a promise about valid input.
+
+Choose a few places where a bug would cause the most harm. For each, write down the input domain, the expected result, and the source that requires it. Quote the relevant sentence when one exists. If the contract remains ambiguous, identify the missing decision instead of inventing a requirement.
+
+## Choose an oracle
+
+An oracle decides whether the observed result is correct. Start with an inexpensive one, then add an independent check where it would catch a different kind of error.
+
+| Oracle, roughly by effort | Property and pbt tools |
+| --- | --- |
+| No panic | Use [NoPanic](04-properties.md#panics) to generate function arguments from types, or call the function inside `Check`; a panic fails the case. |
+| Round trip | Generate a value with `ForAll` or `Draw`, encode it, decode it, and compare with `Fatalf`. Account for documented normalization. See [generators](01-generators.md) and [formats](10-formats.md). |
+| Reference model | Keep a small model of expected state and compare operations through [Commands and postconditions](05-stateful.md). Reset the system for each case. |
+| Invariants after every step | Check conservation, ordering or ownership in each command's `Post`. Remember that `Post` sees the model before `Next`. |
+| Metamorphic check | Draw one input, transform it, and compare the related results in one property. For example, a documented order-independent operation should survive a permutation. |
+| Differential check | Send the same drawn input to two independent implementations and compare results with `Fatalf`. First establish that their contracts agree on that input domain. |
+
+For a possible hang, set `go test -timeout`. The [Deadline combinator](04-properties.md#combining-properties) checks elapsed time only after the call returns. A difference between two implementations is evidence to investigate, not proof that either particular implementation is wrong.
+
+## Build inputs that exercise the contract
+
+Prefer [generators that construct valid inputs](01-generators.md) over a broad generator followed by `Filter` or `Assume`. Use `Bind` for dependent fields and `Frequency` for the mix of alternatives. Include boundaries from existing tests and fixtures alongside generated values. Keep invalid-input properties separate so that their expected errors remain explicit.
+
+Use the [format package](10-formats.md) for standard text inputs. Check whether the project accepts the full standard grammar or only its common form. Use [Make or pbtgen](09-types.md) for Go types, with field overrides for constraints that types cannot express.
+
+Generate [command sequences](05-stateful.md) for stateful code. Independent calls rarely reach states such as expired leases or a closed queue with pending work. Change the model only in `init` and `Next`; let the generator and checks read it. Reset external state, clocks and resources for every execution, including shrinking and diagnostic replays.
+
+Measure the distribution with [Classify, Cover and CheckCoverage](02-distribution.md). Label important operations and boundary cases. Require a minimum share when missing that class would invalidate the experiment. Inspect health warnings before increasing the number of checks. Enable `WarnHealth(HealthDuplicate)` when repeated choices would waste a large search.
+
+## Run in stages
+
+First compile and run the affected package with the default 100 checks. Inspect the statistics and any warnings. Then increase the case count and try several recorded seeds. The following commands assume a property named `TestQueue` in the current package:
+
+```sh
+go test -count=1 -run '^TestQueue$' -pbt.v
+go test -count=1 -run '^TestQueue$' -pbt.checks=10000 -pbt.seed=1
+go test -count=1 -run '^TestQueue$' -pbt.checks=10000 -pbt.seed=2
+go test -count=1 -run '^TestQueue$' -pbt.checks=1000000 -pbt.budget=30s -pbt.seed=3
+```
+
+[Budget](04-properties.md#time-budgets) caps search time, while the case limit can end it earlier. For targeted properties, increase `-pbt.searchsteps`. Neither setting interrupts a blocked call.
+
+Use `-pbt.failures=3` to collect several causes in one run. Assign stable [Signature names](03-shrinking.md#the-failure-stays-the-same) when causes share an assertion site. Read `-pbt.json=runs.jsonl` for structured run results instead of parsing console text. Use `-pbt.observe=observations` for [OpenPBTStats records that Tyche reads](04-properties.md#machine-readable-output).
+
+Try [CoverageGuided](08-targeted.md#searching-with-code-coverage) when nested comparisons make random progress difficult:
+
+```sh
+go test -count=1 -run '^TestQueue$' -cover -coverpkg=./... -pbt.coverage -pbt.checks=10000
+```
+
+Select the packages under test with `-coverpkg`. Run the property alone and avoid parallel tests because coverage counters belong to the whole process. Coverage guidance does not supply an oracle; the property still needs assertions.
+
+## Investigate a failure
+
+Keep the saved case under `testdata/pbt` and run the report's `reproduce:` command. Use `-pbt.replay=FILE` to replay a particular saved case. Record the Go, pbt and project versions: generator changes can change the meaning of saved choices. Inspect a `HealthStale` warning before treating replay as the original input.
+
+Add the minimal input to an ordinary regression test when that makes the defect easier to inspect. Confirm that it fails against the unchanged code. For a sequential stateful failure, [Causality](05-stateful.md#finding-the-step-that-caused-a-failure) can suggest an earlier command that made the failure likely. Its sampled rates guide investigation; they do not establish the cause by themselves.
+
+| Verdict | Signs | Next action |
+| --- | --- | --- |
+| Real bug | A valid input produces a result that contradicts the recorded contract. | Preserve the reproducer and report the mismatch. Fix the implementation only within the requested scope. |
+| Test bug | The generator violates a precondition, the model leaks state, or the comparison assumes an undocumented rule. | Correct that specific mistake, record the reason, and rerun the affected properties. |
+| Intended behaviour | Documentation or an existing test explicitly permits this result. | Adjust the expectation to the contract and keep a test of the documented behaviour. |
+| Environment | The result depends on a clock, platform, service, missing tool or resource limit. | Record the dependency, control it where possible, and rerun before assigning the defect to the library. |
+
+Check related existing findings and issues to avoid reporting the same cause twice. Preserve the original observation when a controlled rerun behaves differently. State what remains uncertain.
+
+## Extend a passing test
+
+A passing run covers the generated cases and the assertions that ran. Use its evidence to choose the next change:
+
+- Inspect labels and command statistics for missing shapes or states. Change weights or add a generator branch, then measure again.
+- Inspect code coverage with `go test -cover -coverprofile=coverage.out`, then `go tool cover -func=coverage.out`. Trace uncovered paths back to missing inputs or operations.
+- Add a new oracle on the same code. A round trip can pass while both directions share a bug; an independent model may reveal it.
+- Count what `Assume`, `Filter` and explicit exclusions remove. Check whether an exclusion hides the cases that matter.
+- Raise `-pbt.maxsize` for longer inputs or programs, while watching generation cost. Try another seed and record the result.
+- Move to another part of the project when further changes no longer improve the tested inputs or assertions.
+
+## Preserve the evidence
+
+Never weaken or delete a property to make a failure disappear. Correct a mistaken oracle only with evidence from the contract. Never delete a saved case to make a run pass. Do not change the code under test until a failing test demonstrates the defect.
+
+A bug report includes the tested versions, minimal input, exact commands, expected result and actual result. Include the documentation sentence that requires the expected behaviour. If a type or standard supplies the rule, identify that source instead. Report how many cases ran, which properties failed, the triage verdict, and any untested scope. Keep the reproducer with the report so that another person can check the finding.

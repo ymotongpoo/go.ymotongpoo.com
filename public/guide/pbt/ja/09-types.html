@@ -52,7 +52,7 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 <div class="layout">
 <nav class="side">
 <h1><a href="./">pbt 利用ガイド</a></h1>
-<div class="version">pbt v0.4.0</div>
+<div class="version">pbt v0.5.0</div>
 <ol>
 <li><a href="./">はじめに</a></li>
 <li><a href="01-generators">生成器</a></li>
@@ -66,13 +66,14 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 <li class="current"><a href="09-types">型から導く生成器</a></li>
 <li><a href="10-formats">規格が定める形式</a></li>
 <li><a href="11-reference">次に読むもの</a></li>
+<li><a href="12-agents">エージェントでプロジェクトをテストする</a></li>
 </ol>
 <div class="lang"><a href="../09-types">English</a></div>
 <div class="lang"><a href="https://pkg.go.dev/go.ymotongpoo.com/pbt">pkg.go.dev</a> · <a href="https://github.com/ymotongpoo/pbt">GitHub</a></div>
 <div class="lang"><a href="09-types.md">Markdown</a> · <a href="/pbt/llms.txt">llms.txt</a></div>
 </nav>
 <main>
-<h1 id="heading">型から導く生成器</h1>
+<h1 id="型から導く生成器">型から導く生成器</h1>
 <p>プログラムのすべての構造体に生成器を書くのは手間で、多くの場合、値がどんな姿かは型がすでに語っています。pbtは2つの方法で型から生成器を導きます。実行時にリフレクションで組む <code>Make[T]</code> と、開発時にGoのソースとして書き出す <code>cmd/pbtgen</code> です。</p>
 <h2 id="make">Make</h2>
 <pre style="background-color:#f7f7f7;-webkit-text-size-adjust:none;"><code><span style="display:flex;"><span><span style="color:#cf222e">type</span><span style="color:#fff"> </span><span style="color:#1f2328">Order</span><span style="color:#fff"> </span><span style="color:#cf222e">struct</span><span style="color:#fff"> </span><span style="color:#1f2328">{</span><span style="color:#fff">
@@ -131,7 +132,7 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 <p><code>time.Time</code> のフィールドは、上の <code>Placed</code> のように、<code>min</code> と <code>max</code> をRFC 3339のタイムスタンプで受け取ります。<code>time.Duration</code> は整数型のままで、ほかの <code>int64</code> と同じように生成されます。</p>
 <p>これら以外にも、助けが要る型があります。リフレクションは非公開フィールドに値を設定できないので、非公開フィールドはゼロ値のままです。状態がすべて非公開の型には <code>WithType</code> が要ります。インターフェース、チャネル、関数には導出できる生成器がないので、同じく <code>WithType</code> か <code>WithField</code> が要ります。足りないと <code>Make</code> はフィールド名を示してパニックします。</p>
 <p>4章の <code>NoPanic</code> は、検査する関数の引数に <code>Make</code> を使い、同じオプションを受け付けます。</p>
-<h2 id="heading-1">再帰的な型</h2>
+<h2 id="再帰的な型">再帰的な型</h2>
 <p>自分自身を含む型は、何かが再帰を制限しない限り有限の生成器を持ちません。<code>Recursive</code> には葉の生成器と、生成器を1段拡張する関数を渡します。サイズパラメーターが値の段数を制限するので、1つの値のノード数はおおよそサイズになります。</p>
 <pre style="background-color:#f7f7f7;-webkit-text-size-adjust:none;"><code><span style="display:flex;"><span><span style="color:#57606a">// Expr is a recursive type. Recursive bounds the depth with the size</span><span style="color:#fff">
 </span></span></span><span style="display:flex;"><span><span style="color:#57606a">// parameter, so a value has about size nodes instead of growing without end.</span><span style="color:#fff">
@@ -208,7 +209,7 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 <span>← <a href="08-targeted">標的型探索と存在性</a></span>
 <span><a href="10-formats">規格が定める形式</a> →</span>
 </div>
-<footer>pbt 利用ガイド for pbt v0.4.0 · <a href="https://github.com/ymotongpoo/pbt/tree/main/docs/guide">source</a> · Apache License 2.0</footer>
+<footer>pbt 利用ガイド for pbt v0.5.0 · <a href="https://github.com/ymotongpoo/pbt/tree/main/docs/guide">source</a> · Apache License 2.0</footer>
 </main>
 </div>
 </body>

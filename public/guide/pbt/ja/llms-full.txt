@@ -1,4 +1,4 @@
-# pbt 利用ガイド（v0.4.0）
+# pbt 利用ガイド（v0.5.0）
 
 > Goのプロパティベーステストライブラリpbtの利用ガイドを1つのファイルにまとめたものです。文書の索引は https://go.ymotongpoo.com/pbt/guide/llms.txt にあります。
 
@@ -12,7 +12,7 @@ pbtは入力を生成し、失敗した入力を小さなケースへ縮小し�
 機能の範囲はErlangの[PropEr](https://proper-testing.github.io/)に合わせています。
 分布を利用者が制御できる生成器、その制御を確かめる統計、モデルに対するステートフルテストと並行テスト、状態機械、標的型探索、存在性のプロパティです。
 
-このガイドはpbt v0.3.3を対象にしています。
+このガイドはpbt v0.5.0を対象にしています。
 `go test` でテストを書いていることを前提にしています。
 関数ごとの説明は[パッケージドキュメント](https://pkg.go.dev/go.ymotongpoo.com/pbt)にあります。
 ここでは、部品どうしがどう組み合わさるか、どの場面でどれを使うかを説明します。
@@ -20,7 +20,7 @@ pbtは入力を生成し、失敗した入力を小さなケースへ縮小し�
 ## インストール
 
 ```sh
-go get go.ymotongpoo.com/pbt@v0.3.3
+go get go.ymotongpoo.com/pbt@v0.5.0
 ```
 
 pbtはGo 1.25以降で動き、標準ライブラリ以外に依存しません。
@@ -91,13 +91,12 @@ var biggestProperty = func(t *pbt.T) {
 }
 ```
 
-`pbt.Check(t, biggestProperty)` を実行すると、次の報告が出ます。
+ガイドのテストは `biggestProperty` を `Seed(1)` と `NoSave()` 付きで実行し、次の報告を得ています。
 
 ```text
 [pbt] property failed after 12 passed checks and 20 shrink steps (size 13)
 [pbt] xs (SliceOfN(Int(), 1, -1)) = []int{-1}
 [pbt] error: biggest([-1]) = 0, want -1
-[pbt] saved to testdata/pbt/TestBiggest/5a0c…; go test replays it until the file is deleted
 [pbt] reproduce: go test -run 'TestBiggest' -pbt.seed=0x1
 ```
 
@@ -114,10 +113,11 @@ var biggestProperty = func(t *pbt.T) {
 `error:` の行は `Fatalf` に渡したメッセージです。
 ログの行、パニック、`OnFail` のコールバックの出力もここに並びます。
 
-このケースは `testdata/pbt` の下の、テスト名のディレクトリに保存されました。
-次の `go test` は新しいケースを生成する前にこれを再実行するので、直すまでバグは見え続けます。
-ファイルは削除しても、回帰テストとして残してもかまいません。
 最後の行は、シードを含めて同じ実行を再現するコマンドです。
+
+`NoSave` を付けなければ、pbtはこのケースを `testdata/pbt` の下の、テスト名のディレクトリにも保存します。
+次の実行は、新しいケースを生成する前にこれを再実行します。
+バグを直した後も、このファイルは回帰テストのケースとして残してください。
 
 ## このガイドの構成
 
@@ -127,6 +127,7 @@ var biggestProperty = func(t *pbt.T) {
 8章は標的型探索と存在性のプロパティ、9章は型から導く生成器です。
 10章は、規格が定める形式の文字列を扱います。
 11章では、例題の移植、rapidからの移行ガイド、参照資料を案内します。
+[12章](12-agents.md)は、コーディングエージェントがプロジェクトをテストするための手順を、プロパティの選び方から再現できるバグの報告まで示します。
 
 ---
 
@@ -509,13 +510,16 @@ var rareCoverProperty = func(t *pbt.T) {
 
 統計は、利用者が立てた問いに答えます。
 ヘルスチェックは、利用者が思い付かないかもしれない問い、つまり実行がケースを無駄なく使っているかに答えます。
-`Check` はすべての実行を監視し、入力に関する3つの問題を警告します。
+`Check` はすべての実行を監視し、無駄になった入力、手間のかかる生成、保存した入力の変化を警告します。
+オプションの検査を有効にすると、選択の重複も検出します。
 
 | 検査 | 警告する条件 |
 | --- | --- |
 | `HealthFilter` | ケースの半数以上（かつ20件以上）が、`Assume`、`Skip`、または引き直しを諦めた `Filter` で破棄された。または、`Filter` が100個以上の値のうち9割を却下した |
 | `HealthLarge` | ケースの5分の1が、それぞれ10,000個を超える選択を取り出した |
 | `HealthSlow` | プロパティ自身の処理を除いた値の取り出しに、1ケースあたり10ミリ秒、合計で1秒かかった |
+| `HealthStale` | 保存したケースの取り出しのコメントが、再実行で得た取り出しと異なる。デフォルトで警告する |
+| `HealthDuplicate` | 破棄されなかった20件以上のランダムなケースのうち、選択列が異なる入力が半分に満たない。デフォルトでは無効 |
 
 長い文字列だけを残すプロパティでは、表の最初の検査 `HealthFilter` が警告を出します。
 
@@ -541,15 +545,54 @@ var longNameProperty = func(t *pbt.T) {
 `Filter` ならその説明、`Assume` や `Skip` なら呼び出した行です。
 `HealthLarge` は、最も多くの選択を使った取り出しを示します。
 
-ヘルスチェックはデフォルトでは `Cover` と同じく警告だけを出し、実行は通過します。
+`HealthDuplicate` 以外のヘルスチェックは、デフォルトでは `Cover` と同じく警告だけを出し、実行は通過します。
 `CheckHealth()` を付けると、`HealthFilter` か `HealthLarge` の警告が出た実行は、プロパティが通過していても失敗になります。
 `CheckHealth(HealthSlow)` は時間の検査を加えます。
 負荷の高いCIマシンでは引っかかることがあるので、この検査はデフォルトでは含めていません。
-`IgnoreHealth(checks...)` は検査を隠し、`CheckHealth` より優先されます。
+`CheckHealth(HealthStale)` を付けると、保存したケースの陳腐化が通過した実行を失敗にします。
+生成器は意図して変えることもあるので、`CheckHealth()` はこの検査を警告のまま残します。
+`IgnoreHealth(checks...)` は検査を隠し、`CheckHealth` と `WarnHealth` より優先されます。
+
 フラグ `-pbt.checkhealth` と `-pbt.ignorehealth` は同じ検査を名前で受け取り、`go test` の実行中のすべての `Check` に効きます。
 例えば `-pbt.checkhealth=default,slow` です。
 失敗した実行には、さらに `HealthFlaky` と `HealthShrink` の2つの検査が働きます。
 この2つは3章で説明します。
+
+`HealthStale` の警告は、保存した同じ選択が、今は別の取り出しの文字列になることを意味します。
+直したはずのバグがまだ失敗するという意味ではありません。
+警告は、ファイルと、最初に変わった取り出しを示します。
+再実行の結果を信じる前に何を確かめればよいかは、[4章](04-properties.md#シード保存したケース再実行)で説明します。
+
+`WarnHealth(HealthDuplicate)` か `-pbt.warnhealth=duplicate` を付けると、重複の警告が有効になります。
+`CheckHealth(HealthDuplicate)` を付けると、エラーとして有効になります。
+引数のない `WarnHealth()` は何も変えません。
+ヘルスチェックのフラグとオプションは足し合わされ、`CheckHealth` がエラーにした検査を `WarnHealth` で警告に戻すことはできません。
+
+```go
+func checkSwitch(tb pbt.TB) {
+	pbt.Check(tb, func(t *pbt.T) {
+		enabled := pbt.Bool().Draw(t, "enabled")
+		t.Classify(enabled, "enabled")
+	}, pbt.Seed(1), pbt.Checks(20), pbt.WarnHealth(pbt.HealthDuplicate))
+}
+```
+
+真偽値の定義域には値が2つしかないので、この実行は意図して同じ値を繰り返します。
+
+```text
+[pbt] health: HealthDuplicate: only 2 of 20 generated inputs were distinct by their choices; possible causes include a small domain such as Bool or SampledFrom, a low maximum size, or more Checks than the input space has values (CheckHealth(HealthDuplicate) makes this fail; IgnoreHealth(HealthDuplicate) hides it)
+```
+
+`HealthDuplicate` は、通常のランダムな生成で得た、通過したケースと失敗したケースを数えます。
+破棄されたケース、保存したケースの再実行、縮小、標的型探索は数えません。
+カバレッジ誘導探索の変異も数えません。
+キーには使った選択のハッシュを使い、サイズは含めません。
+サイズは実行の間に増えるので、含めると序盤のほとんどのケースで選択の重複が見えなくなります。
+
+この数は、異なる値の数の近似です。
+異なる選択が同じ値になることもあり、サイズだけから導いた値は重複として数えられます。
+異なるキーが4096を超えると数えるのをやめます。
+小さな定義域は意図したものであることも多いので、この検査は明示的なオプションを必要とします。
 
 ---
 
@@ -745,6 +788,54 @@ var discountProperty = func(t *pbt.T) {
 どちらにしても、報告はその実行が見つけたバグを記述します。
 ステートフルテストは失敗をコマンドと検査の種類で区別するので、あるコマンドの事後条件の失敗が別のコマンドのパニックに変わることはありません。
 
+1つのアサーションの位置が、複数の原因を受け持つことがあります。
+`t.Signature(name)` は、現在のケースの原因に安定した名前を付けます。
+次の例は[4章のポートのプロパティ](04-properties.md#1回の実行での複数の失敗)を書き換え、2つのバグを1つの `Fatalf` で報告します。
+
+```go
+// parsePort is the parser with two bugs from chapter 4.
+var namedPortProperty = func(t *pbt.T) {
+	s := pbt.StringOf(pbt.SampledFrom([]rune("0123456789"))).Draw(t, "s")
+	_, accepted := parsePort(s)
+	want := validPort(s)
+	if accepted != want {
+		cause := "rejected valid port"
+		if accepted {
+			cause = "accepted invalid port"
+		}
+		t.Signature(cause)
+		t.Fatalf("parsePort(%q): %s", s, cause)
+	}
+}
+```
+
+`Seed(1)` と `MaxFailures(2)` を付けて実行すると、次の報告が出ます。
+
+```text
+[pbt] failure 1 of 2: property failed after 6 passed checks and 9 shrink steps (size 4)
+[pbt] failure was named "accepted invalid port"
+[pbt] s (StringOf(SampledFrom(10 values))) = "0"
+[pbt] error: parsePort("0"): accepted invalid port
+[pbt] reproduce: go test -run 'TestNamedPort' -pbt.seed=0x1 -pbt.failures=2
+[pbt] failure 2 of 2: property failed after 6 passed checks and 90 shrink steps (size 8)
+[pbt] failure was named "rejected valid port"
+[pbt] s (StringOf(SampledFrom(10 values))) = "7000"
+[pbt] error: parsePort("7000"): rejected valid port
+[pbt] reproduce: go test -run 'TestNamedPort' -pbt.seed=0x1 -pbt.failures=2
+```
+
+名前は、アサーションの位置、パニックの型と位置、ステートフルテストのコマンドの検査に代わって、失敗の識別子になります。
+縮小はその名前を保ち、`MaxFailures` は名前の違う失敗を別の失敗として数えます。
+複数の失敗を集めるときの保存ファイル名の接尾辞と、`HealthFlaky` の再実行での比較にも、同じ識別子を使います。
+
+名前には原因を表す語を使い、生成した値を含めないでください。
+値を含めると、値ごとに別の失敗になり、縮小が進まなくなります。
+`Signature` を呼ばなければ、自動の識別子がそのまま使われます。
+失敗の前に呼んでも後に呼んでもかまいません。
+遅延呼び出しやクリーンアップのコールバックの中での呼び出しも含めて、最後の呼び出しが有効です。
+`Conjunction` は1つのケースを共有するので、どの部分で付けた名前もケース全体の名前になります。
+通過したケースでは、名前は無視されます。
+
 ## 失敗が再現しないとき
 
 縮小の前に、`Check` は失敗したケースを同じ選択で1回再実行します。
@@ -808,8 +899,13 @@ var flakyProperty = func(t *pbt.T) {
 | `-pbt.checks` | `Checks(n)` | 100 | 必要な通過ケース数 |
 | `-pbt.seed` | `Seed(s)` | ランダム | 実行のシード。すべての報告に表示 |
 | `-pbt.startsize`、`-pbt.maxsize` | `Sizes(start, max)` | 1、42 | 最初のケースのサイズと、増加の上限 |
+| `-pbt.budget` | `Budget(d)` | 0（無制限） | 探索に使える経過時間。再実行と縮小は含まない |
 | `-pbt.shrinktime` | `ShrinkTime(d)` | 30s | 失敗1件の縮小に使う時間 |
 | `-pbt.failures` | `MaxFailures(n)` | 1 | 集めて縮小し報告する、種類の異なる失敗の数 |
+| `-pbt.causality` | `Causality(n)` | 0（無効） | 逐次のプログラムで原因の候補を探すときの、接頭辞ごとの継続の数（5章） |
+| `-pbt.coverage` | `CoverageGuided()` | false | 実行中のブロック単位のカバレッジで探索を導く（8章） |
+| `-pbt.json` | `ReportJSON(path)` | 空（無効） | 実行ごとに1行のJSONの報告を追記する |
+| `-pbt.observe` | `Observations(dir)` | 空（無効） | OpenPBTStatsの記録をテストごとに1ファイルへ追記する |
 | `-pbt.searchsteps` | `SearchSteps(n)` | 1000 | 標的型探索のケース数 |
 | `-pbt.nosave` | `NoSave()` | false | 失敗したケースを保存しない |
 | `-pbt.replay` | `ReplayFile(path)` | なし | 探索の前に再実行する保存済みケース |
@@ -818,6 +914,7 @@ var flakyProperty = func(t *pbt.T) {
 | | `NoReplay()` | false | 保存済みケースを再実行しない |
 | | `Setup(f)` | なし | 各ケースの前に `f` を実行 |
 | | `CheckCoverage()` | false | 不足か未決の `Cover` 要求で失敗 |
+| `-pbt.warnhealth` | `WarnHealth(checks...)` | なし | オプションのヘルスチェックを警告として有効にする。今は `HealthDuplicate` だけ |
 | `-pbt.checkhealth` | `CheckHealth(checks...)` | なし | 通過した実行を失敗にするヘルスチェック（2章） |
 | `-pbt.ignorehealth` | `IgnoreHealth(checks...)` | なし | 隠すヘルスチェック |
 | | `ReportLimit(chars)`、`ReportDepth(levels)` | 2000、3 | 報告する値の文字数と、入れ子の値の深さ |
@@ -849,6 +946,38 @@ var TestReverseTwice = pbt.MakeCheck(func(t *pbt.T) {
 
 `MakeCheck` はプロパティを `func(*testing.T)` に包みます。
 プロパティの表やサブテストに向いています。
+
+## 時間予算
+
+`Budget(d)` か `-pbt.budget=d` は、探索に使える経過時間を制限します。
+デフォルトのゼロは、時間による制限をかけません。
+時計は保存したケースの再実行の後に動き始めます。
+pbtは新しいケースの前に毎回時間を確かめます。
+破棄したケース、標的型探索のステップ、`CheckCoverage` が延長した実行も対象です。
+
+ケースの数の上限はそのまま有効なので、`Budget` は最低限の実行時間を約束しません。
+指定した時間ほど走らせたいときは `Checks` を大きくしてください。
+`Maximize` か `Minimize` を呼ぶプロパティでは、かわりに `SearchSteps` を大きくします。
+
+```sh
+go test -count=1 -run '^TestQueue$' -pbt.checks=1000000 -pbt.budget=30s
+```
+
+実行中のケースは、予算が尽きても最後まで走ります。
+止まるおそれのあるプロパティには `go test -timeout` を使ってください。
+再実行と縮小はこの予算の外にあり、失敗や証拠ごとの縮小は `ShrinkTime` が別に制限します。
+
+時間が尽きると、`Check` は `Checks` より少ないケースで通過することがあります。
+集めた失敗は、そのまま失敗として縮小され、報告に載ります。
+有効にしたヘルスチェックと `CheckCoverage` も実行を失敗にでき、未決のカバレッジの要求は失敗のままです。
+`CheckExists` は、証拠が見つからなければ失敗します。
+
+予算を使い切って通過した実行は、`Verbose` がなくても必ず要約を出します。
+`TestSearchBudget` は `testing/synctest` を使い、1秒かかるケースを3つ、実際には待たずに走らせます。
+
+```text
+[pbt] OK, passed 3 checks in the 3s budget (seed 0x1)
+```
 
 ## ケースを破棄する
 
@@ -1047,7 +1176,7 @@ var portProperty = func(t *pbt.T) {
 [pbt] reproduce: go test -run 'TestPort' -pbt.seed=0x1 -pbt.failures=2
 ```
 
-失敗した行が違うか、パニックの型か発生位置が違うとき、2つの失敗は異なるものとみなされます。
+デフォルトでは、失敗した行が違うか、パニックの型か発生位置が違うとき、2つの失敗は異なるものとみなされます。
 この区別は、3章で縮小を1つのバグにとどめていたものと同じです。
 縮小器が途中で新しい仕方の失敗に出会えば、それも `n` 件のうちの1件になります。
 どの失敗にも、`ShrinkTime` の時間がそれぞれ丸ごと割り当てられます。
@@ -1055,6 +1184,10 @@ var portProperty = func(t *pbt.T) {
 本当の境界は6554ですが、そこへ至るには後ろの桁をより大きな数字にする必要があり、縮小器はそれを試しません。
 保存した失敗はまとめて再実行され、保存済みのケースが再実行で失敗したときは、それ以上の失敗を探しません。
 `CheckExists` はこのオプションを無視します。
+
+いくつかの原因が1つのアサーションを共有するときは、原因ごとに安定した名前を `t.Signature` に渡してください。
+すべての失敗が同じ行に届いても、`MaxFailures` は名前ごとに分けて集めます。
+[3章の名前付きのポートの例](03-shrinking.md#失敗は同じものに保たれる)は、パーサーが受け付けてしまう不正なポートと、拒んでしまう正しいポートを分けています。
 
 ## シード、保存したケース、再実行
 
@@ -1070,12 +1203,88 @@ pbtを更新した後は、再帰的な型に `Make` を使うプロパティの
 サイズ、コメントとして取り出した値、そして選択の列が入っています。
 同じテストの以後の `Check` は、新しいケースを生成する前に保存済みのケースを再実行し、まだ失敗するなら失敗にします。
 回帰ケースがコードとともにバージョン管理に入るわけです。
-ケースを捨てるにはファイルを削除します。
+バグを直した後も、このファイルは回帰テストのケースとして残してください。
+削除すればその再実行はなくなりますが、実行を通すためだけに削除しないでください。
 この挙動を調整するオプションが3つあります。
 `NoSave` は実行に書き込みをさせません。
 `NoReplay` は保存済みケースを飛ばします。
 `ReplayFile` またはフラグ `-pbt.replay=FILE` は、どのテストでも保存済みファイルを1つ再実行します。
 あるテストのケースを別のテストに渡すときや、CIのログにある失敗を手元で再現するときに使います。
+
+`HealthStale` は、保存した取り出しのコメントが今の再実行の取り出しと異なるとき、デフォルトで警告します。
+生成器が変わると、同じ選択が別の入力になることがあります。
+警告にある保存時の文字列と今の文字列を比べ、元の値をまだ試す必要があるなら、その値を明示的にテストしてください。
+陳腐化したケースの再実行が通過しても、元の回帰が直ったことの証明にはなりません。
+
+比較は文字列として描画した値で行い、値の深い比較は行いません。
+切り詰めで変化が隠れることがあり、ポインターや独自の書式のように描画が安定しない取り出しは比較しません。
+`CheckHealth(HealthStale)` か `-pbt.checkhealth=stale` を付けると、この警告で通過した実行を失敗にします。
+`IgnoreHealth(HealthStale)` は警告を隠します。
+再実行は保存したコメントを書き換えません。
+
+## 機械可読の出力
+
+`ReportJSON(path)` か `-pbt.json=path` は、`Check` か `CheckExists` のたびにJSONを1行追記します。
+デフォルトの空のパスでは出力しません。
+親ディレクトリは先に作っておいてください。
+スキーマの名前は `go.ymotongpoo.com/pbt/report/v1` で、読む側は知らないフィールドを無視してください。
+
+| フィールド | 内容 |
+| --- | --- |
+| `test`、`seed`、`kind`、`status`、`errors` | テスト名、16進数のシード、`check` か `exists`、結果、エラーメッセージ |
+| `checks_passed`、`rejected`、`discards` | 探索の件数。再実行と縮小は含まない。`rejected` は失敗した候補の数 |
+| `budget_exhausted`、`durations_seconds` | 時間で探索が終わったか。全体、探索、縮小の所要時間 |
+| `failures`、`witness` | 失敗の識別子、描画した取り出し、保存先のパス、再現のコマンド。`witness` は `CheckExists` が成功したときだけ |
+| `health`、`statistics`、`objectives` | 診断、ラベル、カバレッジの要求、測定値、最良の効用 |
+
+`status` は `passed`、`failed`、`gave_up`、`no_witness`、`error` のどれかです。
+取り出しの値は描画した文字列で、`ReportLimit` と `ReportDepth` に従います。
+有限でない数は、文字列の `NaN`、`+Inf`、`-Inf` で表します。
+
+```go
+func checkRecordedRun(tb pbt.TB, reportPath, observationDir string) {
+	pbt.Check(tb, func(t *pbt.T) {
+		n := pbt.IntRange(0, 9).Draw(t, "n")
+		t.Classify(n%2 == 0, "even")
+		if n < 0 || n > 9 {
+			t.Fatalf("out of range: %d", n)
+		}
+	}, pbt.Seed(1), pbt.Checks(3),
+		pbt.ReportJSON(reportPath), pbt.Observations(observationDir))
+}
+```
+
+`TestMachineReadableOutput` は両方のファイルを確かめます。
+次はそのJSONの報告から、所要時間、統計、空のコレクションを省いたものです。
+載せたフィールドの値は、取得したままです。
+
+```json
+{"schema":"go.ymotongpoo.com/pbt/report/v1","test":"TestRecordedRun","seed":"0x1","kind":"check","status":"passed","checks_passed":3,"rejected":0,"discards":0,"budget_exhausted":false}
+```
+
+`Observations(dir)` か `-pbt.observe=dir` は、Tycheが読むOpenPBTStatsの記録を追記します。
+デフォルトの空のディレクトリでは記録しません。
+pbtはディレクトリを作り、`observations/TestRecordedRun.jsonl` のように、整えたテスト名ごとに1ファイルを書きます。
+サブテストの名前はサブディレクトリになります。
+整えた名前は衝突することがあり、同じファイルに入った記録は `property` と `run_start` で区別します。
+
+`test_case` の記録には、入力、結果、生成の段階、特徴量、所要時間が入ります。
+特徴量には、ラベル、測定値、カバレッジの要求に当たったかどうか、標的の効用が入ります。
+所要時間は、入力の生成とテストの実行を分けて記録します。
+再実行と縮小の試行も記録になります。
+`metadata.final=true` の付いた `minimal` の記録はスナップショットで、もう一度実行したものではありません。
+実行の最後には `info` の記録が入ります。
+`coverage` のフィールドは、`CoverageGuided` を使っても今は `null` です。
+
+```sh
+go test -count=1 ./... -pbt.json=runs.jsonl -pbt.observe=observations
+```
+
+ログの転送エージェントでこれらのファイルを読み、記録や集計した件数をログやメトリクスのバックエンドへ送れます。
+pbtはファイルを手元に書くだけで、ネットワークには送りません。
+観測記録はバッファーにためて実行の最後に書き出すので、異常終了するとバッファーの中の記録が失われることがあります。
+書き込みに失敗するとテストは失敗します。
+求められた出力を届けられなかったからです。
 
 ---
 
@@ -1268,6 +1477,92 @@ func (q *leakyQueue) Close(id int) error {
 縮小器はコマンドを1つずつ取り除き、そのたびに後続のコマンドを新しいモデル状態から再生成して事前条件を検査し、3つが残るまで続けました。
 漏れを示す最短のプログラムです。
 失敗は検査の種類とコマンド、つまり「postcondition of open」で区別されるので、縮小が別の失敗にすり替わることはありません。
+
+## 失敗を招いた手を探す
+
+失敗を検出するコマンドは、失敗を招いたコマンドよりずっと後に走ることがあります。
+`Causality(n)` か `-pbt.causality=n` は、最初に失敗したプログラムの継続を、縮小の前に標本として集めます。
+デフォルトのゼロでは、この分析を行いません。
+
+pbtは、標本にした接頭辞ごとに最後のコマンドまでの選択を残し、元のサイズで新しい継続を `n` 個生成します。
+報告には、元の失敗と同じ識別子で失敗した継続の割合が載ります。
+破棄された継続は、この割合に入れません。
+割合が上がっていれば、残した接頭辞の中のコマンドが失敗を起こりやすくしたことを示唆します。
+
+次のプロパティは `write(7)` で値を失い、関係のない4つのコマンドの後の `read()` でその喪失を検出します。
+
+```go
+var delayedWriteProperty = func(t *pbt.T) {
+	step, want, stored := 0, 0, 0
+	init := func() { step, want = 0, 0 }
+	next := func(pbt.Var) { step++ }
+	gen := func() pbt.CommandGen {
+		switch step {
+		case 0:
+			return pbt.Map(pbt.IntRange(0, 15), func(value int) pbt.Command {
+				return pbt.Command{
+					Name: "write", Args: []any{value},
+					Run: func(pbt.Env) any {
+						stored = value
+						if value == 7 {
+							stored = 0 // planted bug: this write loses its value
+						}
+						return nil
+					},
+					Next: func(pbt.Var) { want = value; step++ },
+				}
+			})
+		case 5:
+			return pbt.Just(pbt.Command{
+				Name: "read", Next: next,
+				Run: func(pbt.Env) any { return stored },
+				Post: func(_ pbt.Env, result any) error {
+					if result.(int) != want {
+						return fmt.Errorf("read %d, want %d", result, want)
+					}
+					return nil
+				},
+			})
+		default:
+			return pbt.Just(pbt.Command{Name: "wait", Next: next})
+		}
+	}
+	pbt.Commands(init, gen, pbt.Length(6, 6)).Draw(t, "program").RunSequential(t)
+}
+```
+
+`TestCausalityFindsEarlyWrite` は、これを `Seed(1)` と `Causality(32)` で実行します。
+報告には次の行が含まれます。
+ここではプログラム、履歴、後ろの接頭辞の割合を省いています。
+
+```text
+[pbt] property failed after 38 passed checks and 16 shrink steps (size 39)
+[pbt] error: step 6: postcondition of read() failed: read 0, want 7
+[pbt] reproduce: go test -run 'TestDelayedWrite' -pbt.seed=0x1
+[pbt] causality (32 continuations per prefix, seed 0x1):
+[pbt]   steps are generated commands of the first failing case, before shrinking in this run
+[pbt]   after 0 of 6 steps: 0/32 fail with the same identity
+[pbt]   after 1 of 6 steps: 32/32 fail with the same identity <- largest measured rise at step 1: write(7)
+```
+
+事後条件が失敗するのは6手目ですが、最初のコマンドを残すと、標本にしたすべての継続が失敗します。
+この例では、`Length(6, 6)` によって、縮小の間も検出が遅れる形を保っています。
+長さが変わるプログラムでは、縮小がコマンドを取り除き、手の番号が変わることがあります。
+因果分析の報告が指すのは、その縮小の前の、最初に失敗したプログラムです。
+
+分析の手間は、縮小の前に失敗を確かめる通常の再実行に加えて、プロパティの実行が最大で `16*n` 回です。
+間隔を空けて最大8つの接頭辞を標本にし、測った中で最も大きな上昇を最大8回まで二分します。
+これらの実行でもセットアップとクリーンアップが走るので、プロパティを呼ぶたびにシステムをリセットしてください。
+チェック数や統計には数えず、`OnFail` も呼ばず、ケースも保存しません。
+
+この分析の対象は、`fsm.Commands` を含む逐次の `Commands` のプログラムです。
+並行プログラムは、生成の順序が実行の順序と一致しないので飛ばします。
+縮小の前の確認の再実行で再現しない失敗も飛ばします。
+`MaxFailures` では最初の失敗だけを分析し、`CheckExists` はこのオプションを無視します。
+保存したケースでは、元の縮小前のプログラムが残っていないので、再実行したプログラムを分析します。
+
+上昇が示すのは原因の候補であって、証明ではありません。
+標本のばらつきで上昇が隠れることも、割合がまた下がることもあり、長い列では候補の手を範囲までしか絞れないこともあります。
 
 ## 良いモデルの書き方
 
@@ -1524,6 +1819,8 @@ var walkProperty = func(t *pbt.T) {
 pbtはそれまでで最良のケースの選択を変異させ、効用が高ければその変異を残し、局所的な最大から抜けるために探索の早い段階では悪い変異も時々残し、ときどき新しいケースからやり直します。
 探索は、チェック数ではなく `SearchSteps` か `-pbt.searchsteps` で決めたステップ数（デフォルトは1000）だけ続きます。
 
+次の報告では、歩みの列を `…` で短くし、再現の行を省いています。
+
 ```text
 [pbt] property failed after 246 passed checks and 2039 shrink steps (size 33)
 [pbt] utility position = 51
@@ -1600,6 +1897,145 @@ var poolProperty = func(t *pbt.T) {
 通過した実行では、要約に各目的の最良の値が載ります。
 目的どうしで探索のステップを分け合うので、目的が複数ある実行には `SearchSteps` で多めのステップを与えてください。
 目的が1つのプロパティは、以前とまったく同じように探索します。
+
+## 遅い入力を探す
+
+性能のプロパティでは、テスト対象の呼び出しにかかった時間を最大化できます。
+先に入力を取り出し、呼び出しの直前に `time.Now()` を記録し、`time.Since(start).Seconds()` を `t.Maximize("seconds", elapsed)` に渡します。
+こうすると、生成にかかった時間が効用に入りません。
+
+経過時間にはばらつきがあります。
+スケジューリング、ガベージコレクション、キャッシュによって、同じ入力でも時間が変わります。
+遅いケースを性能のバグの証拠とみなす前に、そのケースを繰り返し実行してください。
+探索の目的には、決定的な仕事量の数のほうが向いていることが多くあります。
+
+ガイドの例は、2重ループの走査で行った比較の回数を測ります。
+早い位置に重複がある入力はすぐに終わり、異なる値が多い入力ほど比較が増えます。
+
+```go
+// allDistinct counts the comparisons that this quadratic scan performs.
+func allDistinct(xs []int) (bool, int) {
+	comparisons := 0
+	for i, x := range xs {
+		for _, y := range xs[:i] {
+			comparisons++
+			if x == y {
+				return false, comparisons
+			}
+		}
+	}
+	return true, comparisons
+}
+
+var scanWorkProperty = func(t *pbt.T) {
+	xs := pbt.SliceOfN(pbt.IntRange(0, 9), 0, 10).Draw(t, "xs")
+	_, comparisons := allDistinct(xs)
+	t.Maximize("comparisons", float64(comparisons))
+	if comparisons > 20 {
+		t.Fatalf("scan used %d comparisons, limit 20", comparisons)
+	}
+}
+```
+
+`TestSearchFindsExpensiveScan` は、このプロパティを `Seed(1)` で実行します。
+報告は次のとおりです。
+
+```text
+[pbt] property failed after 194 passed checks and 213 shrink steps (size 42)
+[pbt] utility comparisons = 21
+[pbt] xs (SliceOfN(IntRange(0, 9), 0, 10)) = []int{0, 1, 2, 3, 5, 4, 4}
+[pbt] error: scan used 21 comparisons, limit 20
+[pbt] reproduce: go test -run 'TestScanWork' -pbt.seed=0x1
+```
+
+実際のプロジェクトでは、経過時間も同じように扱えます。
+測った時間を最大化し、許容できる上限をアサーションにします。
+`Maximize` だけではケースは失敗しません。
+通過した探索は最良の効用を報告しますが、反例は保存しません。
+上限のアサーションがあれば遅いケースが失敗になり、通常の実行と同じように縮小されて保存されます。
+ガイドのテストは、仕込んだ失敗をテストスイートに書き込まないように、記録用のTBを通して `NoSave` を付けています。
+
+## コードカバレッジで探索する
+
+`CoverageGuided()` か `-pbt.coverage` は、`testing.Coverage` を使う実験的な探索を有効にします。
+デフォルトでは無効です。
+`go test -cover` でビルドし、`-coverpkg` でカバレッジを数えるパッケージを選んでください。
+計装されていなければ、pbtはヒントをログに出して通常の探索を使います。
+
+生成したケースのうち、通過して実行中のブロック単位のカバレッジを上げたものが、最大64個の種のプールに入ります。
+選択を持たないケースは、変異の種になれません。
+プールに種が入ると、新しいケースと、ランダムに選んだ種の変異を交互に試します。
+プールがいっぱいになると最も古い種を捨て、プールは1回の `Check` の間だけ保たれます。
+変異は種のサイズを使い、新しいケースと同じく `Checks` に数えます。
+
+この探索は、入れ子になった比較の連鎖で役に立ちます。
+比較を1つ多く通過したケースは別のブロックに届き、次の比較を試す種になれます。
+次の例は、4バイトのヘッダーを判定します。
+
+```go
+// This function lives in a .go file: go test does not instrument _test.go files.
+func recognizesHeader(b []byte) bool {
+	if len(b) == 4 {
+		if b[0] == 'P' {
+			if b[1] == 'B' {
+				if b[2] == 'T' {
+					if b[3] == '!' {
+						return true
+					}
+				}
+			}
+		}
+	}
+	return false
+}
+```
+
+```go
+func TestCoverageGuidedHeader(t *testing.T) {
+	if testing.CoverMode() == "" {
+		t.Skip("run with -cover -coverpkg=go.ymotongpoo.com/pbt/docs/guide/snippets")
+	}
+	property := func(t *pbt.T) {
+		b := pbt.SliceOfN(pbt.SampledFrom([]byte("PBT!?")), 4, 4).Draw(t, "header")
+		if got := recognizesHeader(b); got != (string(b) == "PBT!") {
+			t.Fatalf("header %q: accepted=%t", b, got)
+		}
+	}
+	logs := passingLogs(t, "TestHeader", property, pbt.Seed(1),
+		pbt.Checks(200), pbt.CoverageGuided(), pbt.Verbose())
+	mustContain(t, logs, "[pbt] coverage-guided:", "of 200 passing cases", "seeds kept")
+}
+```
+
+Goは `_test.go` のファイルを計装しないので、判定する関数は `coverage_fixture.go` に置いています。
+テストは、バイナリが計装されていなければ自分で飛ばします。
+リポジトリのルートから、このテストだけを実行してください。
+
+```sh
+go test -count=1 -v -cover -coverpkg=go.ymotongpoo.com/pbt/docs/guide/snippets ./docs/guide/snippets -run '^TestCoverageGuidedHeader$'
+```
+
+出力には次の行が含まれます。
+
+```text
+[pbt] coverage-guided: 4 of 200 passing cases reached new code, 4 seeds kept, coverage 0.0% -> 60.0%
+[pbt] OK, passed 200 checks (seed 0x1)
+```
+
+割合は `testing.Coverage` による実行中の推定値です。
+`go test` が最後に出す、文の数で重み付けした割合とは異なります。
+コンパイラーの計装や先に走ったテストによって出力が変わるので、テストは割合の値ではなく報告の形を確かめています。
+
+カバレッジによる誘導には限界があります。
+
+- カウンターはプロセス全体のものです。先に走ったテストが役に立つ手がかりを使い切ることがあり、並行するテストや別のゴルーチンが、関係のないカバレッジをケースに帰属させることがあります。
+- 手がかりになるのは到達したブロックで、エッジや実行回数はありません。すでに到達したブロックの中の比較からは、新しい手がかりが得られません。
+- 1回の読み取りでカウンターを走査するので、計装したコードが多いほど手間が増えます。テスト対象のパッケージを選んでください。pbt自身を計装すると、pbtの処理も手がかりに入ります。
+- シードだけでは、カバレッジの履歴が異なる実行で同じ探索の順序を再現できません。保存した反例は、これまでどおり選択を再実行します。
+
+この手がかりを使うときは、プロパティを単独で実行し、`t.Parallel` を避けてください。
+標的型探索が始まると、`Maximize` か `Minimize` が優先され、`SearchSteps` の上限が使われます。
+`CheckExists` はカバレッジによる誘導を無視します。
 
 ## 存在性
 
@@ -2000,10 +2436,10 @@ ISO 3166の国コードやISO 4217の通貨のように、レジストリに従�
 | パッケージ | 対象 | 見せること |
 | --- | --- | --- |
 | `httpapi` | `httptest` で動かす、楽観的並行制御つきのREST API | サーバーが採番したIDを `Var` で持つこと、ステータスコードを事後条件にすること、ロックの外でIDを採番するサーバーに対する並行実行 |
-| `jobqueue` | リース、可視性タイムアウト、デッドレターを持つワーカーキュー | コマンドで進める擬似時計、失効したリースをモデルに残すこと、リースを確かめないack |
-| `ratelimit` | クライアントごとのスライディングウィンドウ制限 | 「どの窓でもN件まで」という規則そのものをモデルにすること、クライアントを早く忘れすぎる掃除 |
+| `jobqueue` | リース、可視性タイムアウト、デッドレターを持つワーカーキュー | コマンドで進める擬似時計、失効したリースをモデルに残すこと、リースを確かめないack、2つのワーカーの間の引き継ぎに対する `Causality` |
+| `ratelimit` | クライアントごとのスライディングウィンドウ制限 | 「どの窓でもN件まで」という規則そのものをモデルにすること、クライアントを早く忘れすぎる掃除、時間予算付きの実行が書いた `ReportJSON` と `Observations` のファイルをCIのジョブと同じようにテストで読むこと |
 | `sessions` | 失効、更新、ログアウトのあるセッションストア | 状態データと時計を伴う `fsm` パッケージ、行き先で分けた時間経過の遷移 |
-| `ledger` | 口座間の送金 | 結果を予測するモデルと不変条件だけを確かめる監査の併用、並行実行で捕まえる残高超過の競合 |
+| `ledger` | 口座間の送金 | 結果を予測するモデルと不変条件だけを確かめる監査の併用、並行実行で捕まえる残高超過の競合、監査の2つの原因を分けて報告する `Signature` と `MaxFailures` |
 
 `examples` の中で `go test -v -run Caught ./practical/...` を実行すると、仕込んだバグの報告を読めます。
 例題に共通する書き方は、このディレクトリのREADMEに書いてあります。
@@ -2044,11 +2480,163 @@ go test ./... -pbt.checks=1000          # ケース数を増やす
 go test ./... -pbt.seed=0x1c3           # 実行を繰り返す
 go test ./... -pbt.startsize=10 -pbt.maxsize=100
 go test ./... -pbt.shrinktime=2m
+go test ./... -pbt.checks=1000000 -pbt.budget=30s # 時間で区切った探索
 go test ./... -pbt.searchsteps=5000     # 標的型探索を長くする
 go test ./... -pbt.failures=3           # 種類の異なる失敗を3件まで集める
+go test ./... -pbt.causality=32         # 逐次の接頭辞ごとの継続の数
+go test ./... -pbt.warnhealth=duplicate # 選択の重複を警告する
 go test ./... -pbt.checkhealth=default  # 無駄な入力や大きすぎる入力で失敗にする
 go test ./... -pbt.ignorehealth=slow    # 時間の警告を隠す
 go test ./... -pbt.nosave               # testdata/pbt に書き込まない
 go test ./... -pbt.replay=testdata/pbt/TestQueue/3f2a… -run TestQueue
 go test ./... -pbt.v                    # 要約と縮小のステップを表示する
+go test ./... -pbt.json=runs.jsonl       # 実行ごとに1行のJSON
+go test ./... -pbt.observe=observations  # Tycheが読むOpenPBTStatsのファイル
+go test -cover -coverpkg=./... ./... -pbt.coverage # 実行中のブロック単位のカバレッジで導く
 ```
+
+---
+
+# エージェントでプロジェクトをテストする
+
+まず、失敗したときにプロジェクトにとって意味のある、少数のプロパティから始めてください。
+プロパティごとに、期待する振る舞いの出典と結果を一緒に記録しておきます。
+役に立つ結果とは、プロジェクトの契約と食い違うことを再現でき、その証拠を残すテストが付いているものです。
+
+## 契約を確かめる
+
+テスト対象のコードのドキュメント、公開されている型、既存のテスト、フィクスチャーを読んでください。
+プロジェクトが従うと約束している規格も探します。
+これらの資料が、妥当な入力、許されるエラー、期待する結果を定めます。
+オラクルを選ぶ前に、資料どうしの食い違いを記録しておきます。
+
+基本的な規則からもプロパティが得られます。
+妥当なリクエストでパニックしないこと、保存したデータが消えないこと、操作が終わることです。
+規則ごとに、その適用範囲を書いておいてください。
+例えば、不正な入力でパニックすることがドキュメントに書かれていれば、妥当な入力についての約束には反しません。
+
+バグがあったときに最も害の大きい場所をいくつか選びます。
+それぞれについて、入力の定義域、期待する結果、それを求める出典を書き出します。
+該当する文があれば引用してください。
+契約があいまいなままなら、要件を作り出さずに、決まっていない点を特定します。
+
+## オラクルを選ぶ
+
+**オラクル**は、観測した結果が正しいかどうかを判定する仕組みです。
+手間の少ないものから始め、別の種類の誤りを捉えられる箇所に独立した検査を足してください。
+
+| オラクル（手間の少ない順） | プロパティとpbtの道具 |
+| --- | --- |
+| パニックしない | [NoPanic](04-properties.md#パニック)で型から関数の引数を生成するか、`Check` の中で関数を呼ぶ。パニックはケースを失敗にする |
+| 往復 | `ForAll` か `Draw` で値を生成し、符号化して復号し、`Fatalf` で比べる。ドキュメントにある正規化は考慮する。[生成器](01-generators.md)と[形式](10-formats.md)を参照 |
+| 参照モデル | 期待する状態の小さなモデルを持ち、[Commandsと事後条件](05-stateful.md)で操作を比べる。ケースごとにシステムをリセットする |
+| 各ステップの後の不変条件 | 保存則、順序、所有関係を各コマンドの `Post` で確かめる。`Post` が見るのは `Next` の前のモデル |
+| メタモルフィックな検査 | 1つの入力を取り出して変換し、関係する結果を1つのプロパティの中で比べる。例えば、順序に依存しないとドキュメントにある操作は、並べ替えても結果が変わらない |
+| 差分の検査 | 取り出した同じ入力を独立した2つの実装に渡し、`Fatalf` で結果を比べる。先に、その入力の定義域で両者の契約が一致することを確かめる |
+
+止まるおそれがあるなら、`go test -timeout` を設定してください。
+[Deadlineのコンビネーター](04-properties.md#プロパティを組み合わせる)は、呼び出しが戻った後でしか経過時間を確かめません。
+2つの実装の違いは調べるべき証拠であって、どちらかの実装が誤っていることの証明ではありません。
+
+## 契約を突く入力を組む
+
+広い生成器を `Filter` や `Assume` で絞るより、[妥当な入力を組み立てる生成器](01-generators.md)を選んでください。
+依存するフィールドには `Bind` を、選択肢の配分には `Frequency` を使います。
+既存のテストやフィクスチャーにある境界の値も、生成した値と一緒に入れます。
+不正な入力についてのプロパティは分けておき、期待するエラーを明示したままにします。
+
+規格に沿った文字列の入力には、[formatパッケージ](10-formats.md)を使ってください。
+プロジェクトが規格の文法全体を受け付けるのか、一般的な形だけを受け付けるのかを確かめます。
+Goの型には[Makeかpbtgen](09-types.md)を使い、型で表せない制約はフィールドの上書きで与えます。
+
+ステートフルなコードには、[コマンドの列](05-stateful.md)を生成してください。
+個々の呼び出しを独立に試すだけでは、期限の切れたリースや、未処理の仕事を残して閉じたキューのような状態にはまず届きません。
+モデルを変えるのは `init` と `Next` だけにし、生成器と検査はモデルを読むだけにします。
+外部の状態、時計、資源は、縮小や診断のための再実行も含めて、実行のたびにリセットしてください。
+
+分布は[Classify、Cover、CheckCoverage](02-distribution.md)で測ります。
+失敗したときの影響が大きい操作と、境界値のケースにはラベルを付けます。
+ある種類のケースが欠けると実験が成り立たないなら、最低限の割合を要求してください。
+チェック数を増やす前に、ヘルスチェックの警告を確かめます。
+大きな探索で選択の重複が無駄になるなら、`WarnHealth(HealthDuplicate)` を有効にします。
+
+## 段階を踏んで走らせる
+
+まず、変更したパッケージをデフォルトの100チェックでコンパイルして実行します。
+統計と警告を確かめてから、ケースの数を増やし、記録したいくつかのシードで試してください。
+次のコマンドは、今のパッケージに `TestQueue` という名前のプロパティがあるものとしています。
+
+```sh
+go test -count=1 -run '^TestQueue$' -pbt.v
+go test -count=1 -run '^TestQueue$' -pbt.checks=10000 -pbt.seed=1
+go test -count=1 -run '^TestQueue$' -pbt.checks=10000 -pbt.seed=2
+go test -count=1 -run '^TestQueue$' -pbt.checks=1000000 -pbt.budget=30s -pbt.seed=3
+```
+
+[Budget](04-properties.md#時間予算)は探索の時間に上限を設けますが、ケースの数の上限で先に終わることもあります。
+標的型のプロパティでは `-pbt.searchsteps` を大きくしてください。
+どちらの設定も、止まった呼び出しを中断しません。
+
+`-pbt.failures=3` を使うと、1回の実行で複数の原因を集められます。
+原因が同じアサーションの位置を共有するときは、安定した[Signatureの名前](03-shrinking.md#失敗は同じものに保たれる)を付けてください。
+実行の結果は、コンソールの文字列を解析するかわりに `-pbt.json=runs.jsonl` から読みます。
+[Tycheが読むOpenPBTStatsの記録](04-properties.md#機械可読の出力)には `-pbt.observe=observations` を使います。
+
+入れ子の比較のせいでランダムな探索が進まないときは、[CoverageGuided](08-targeted.md#コードカバレッジで探索する)を試してください。
+
+```sh
+go test -count=1 -run '^TestQueue$' -cover -coverpkg=./... -pbt.coverage -pbt.checks=10000
+```
+
+`-coverpkg` でテスト対象のパッケージを選びます。
+カバレッジのカウンターはプロセス全体のものなので、プロパティを単独で実行し、並行するテストを避けてください。
+カバレッジによる誘導はオラクルの代わりにはならず、プロパティにはアサーションが引き続き必要です。
+
+## 失敗を調べる
+
+`testdata/pbt` の下の保存したケースは残し、報告の `reproduce:` のコマンドを実行してください。
+特定の保存したケースを再実行するには `-pbt.replay=FILE` を使います。
+Go、pbt、プロジェクトのバージョンを記録しておきます。
+生成器が変わると、保存した選択の意味が変わることがあるからです。
+`HealthStale` の警告が出たら、再実行が元の入力を試していると考える前に、その内容を確かめてください。
+
+欠陥を調べやすくなるなら、最小の入力を通常の回帰テストに書き足します。
+そのテストが、変更していないコードで失敗することを確かめてください。
+逐次のステートフルテストの失敗では、[Causality](05-stateful.md#失敗を招いた手を探す)が、失敗を起こりやすくした手前のコマンドを示唆します。
+標本から得た割合は調査の手がかりであって、それだけで原因を確定するものではありません。
+
+| 判定 | 兆候 | 次の行動 |
+| --- | --- | --- |
+| 本物のバグ | 妥当な入力が、記録した契約と矛盾する結果を返す | 再現手順を残し、食い違いを報告する。実装の修正は、依頼された範囲に限る |
+| テストのバグ | 生成器が事前条件を破る、モデルが状態を漏らす、比較がドキュメントにない規則を前提にしている | その誤りだけを正し、理由を記録して、影響するプロパティを再実行する |
+| 意図された振る舞い | ドキュメントか既存のテストが、この結果を明示的に許している | 期待を契約に合わせ、ドキュメントにある振る舞いのテストを残す |
+| 環境 | 結果が時計、プラットフォーム、サービス、足りないツール、資源の上限に左右される | 依存を記録し、できるなら制御し、ライブラリの欠陥とみなす前に再実行する |
+
+同じ原因を二度報告しないように、関連する既存の調査結果やissueを確かめてください。
+制御した再実行で振る舞いが変わっても、元の観測は残しておきます。
+不確かな点は、不確かなまま書きます。
+
+## 通過したテストを広げる
+
+通過した実行が示すのは、生成したケースと、実行したアサーションの範囲だけです。
+次に何を変えるかは、その実行が残した証拠から選んでください。
+
+- ラベルとコマンドの統計を見て、欠けている形や状態を探します。重みを変えるか生成器に分岐を足し、もう一度測ります。
+- `go test -cover -coverprofile=coverage.out` の後に `go tool cover -func=coverage.out` を実行してコードカバレッジを調べます。到達していない経路を、欠けている入力や操作まで遡ります。
+- 同じコードに新しいオラクルを足します。往復の検査は、両方向が同じバグを共有していれば通過してしまいますが、独立したモデルならそれを見つけられることがあります。
+- `Assume`、`Filter`、明示的な除外が取り除くものを数えます。除外が、重要なケースを隠していないかを確かめてください。
+- 長い入力やプログラムを試すには `-pbt.maxsize` を上げ、生成の手間を見張ります。別のシードも試し、その結果を記録します。
+- 変更を重ねても、試す入力やアサーションが改善しなくなったら、プロジェクトの別の部分へ移ります。
+
+## 証拠を残す
+
+失敗を消すために、プロパティを弱めたり削除したりしないでください。
+誤ったオラクルを直すのは、契約に基づく証拠があるときだけです。
+実行を通すために、保存したケースを削除しないでください。
+失敗するテストで欠陥を示すまでは、テスト対象のコードを変えないでください。
+
+バグの報告には、試したバージョン、最小の入力、正確なコマンド、期待した結果、実際の結果を入れます。
+期待する振る舞いを求めているドキュメントの文も添えてください。
+規則の出典が型や規格なら、その出典を示します。
+走らせたケースの数、失敗したプロパティ、切り分けの判定、試していない範囲も報告します。
+ほかの人が結果を確かめられるように、再現手順を報告と一緒に残してください。

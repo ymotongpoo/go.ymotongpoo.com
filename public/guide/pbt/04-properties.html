@@ -52,7 +52,7 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 <div class="layout">
 <nav class="side">
 <h1><a href="./">pbt user guide</a></h1>
-<div class="version">pbt v0.4.0</div>
+<div class="version">pbt v0.5.0</div>
 <ol>
 <li><a href="./">Getting started</a></li>
 <li><a href="01-generators">Generators</a></li>
@@ -66,6 +66,7 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 <li><a href="09-types">Generators from types</a></li>
 <li><a href="10-formats">Standard formats</a></li>
 <li><a href="11-reference">Where to go next</a></li>
+<li><a href="12-agents">Testing a project with an agent</a></li>
 </ol>
 <div class="lang"><a href="ja/04-properties">日本語</a></div>
 <div class="lang"><a href="https://pkg.go.dev/go.ymotongpoo.com/pbt">pkg.go.dev</a> · <a href="https://github.com/ymotongpoo/pbt">GitHub</a></div>
@@ -105,6 +106,12 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 <td>size of the first case and the size the cases grow to</td>
 </tr>
 <tr>
+<td><code>-pbt.budget</code></td>
+<td><code>Budget(d)</code></td>
+<td>0 (unlimited)</td>
+<td>elapsed time allowed for search, excluding replay and shrinking</td>
+</tr>
+<tr>
 <td><code>-pbt.shrinktime</code></td>
 <td><code>ShrinkTime(d)</code></td>
 <td>30s</td>
@@ -115,6 +122,30 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 <td><code>MaxFailures(n)</code></td>
 <td>1</td>
 <td>distinct failures to collect, shrink and report</td>
+</tr>
+<tr>
+<td><code>-pbt.causality</code></td>
+<td><code>Causality(n)</code></td>
+<td>0 (off)</td>
+<td>continuations per prefix to locate a possible cause in a sequential program (chapter 5)</td>
+</tr>
+<tr>
+<td><code>-pbt.coverage</code></td>
+<td><code>CoverageGuided()</code></td>
+<td>false</td>
+<td>use live block coverage to guide search (chapter 8)</td>
+</tr>
+<tr>
+<td><code>-pbt.json</code></td>
+<td><code>ReportJSON(path)</code></td>
+<td>empty (off)</td>
+<td>append one JSON report per run</td>
+</tr>
+<tr>
+<td><code>-pbt.observe</code></td>
+<td><code>Observations(dir)</code></td>
+<td>empty (off)</td>
+<td>append OpenPBTStats records, one file per test</td>
 </tr>
 <tr>
 <td><code>-pbt.searchsteps</code></td>
@@ -165,6 +196,12 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 <td>fail on an unmet or undecided <code>Cover</code> requirement</td>
 </tr>
 <tr>
+<td><code>-pbt.warnhealth</code></td>
+<td><code>WarnHealth(checks...)</code></td>
+<td>none</td>
+<td>enable optional health warnings, currently <code>HealthDuplicate</code></td>
+</tr>
+<tr>
 <td><code>-pbt.checkhealth</code></td>
 <td><code>CheckHealth(checks...)</code></td>
 <td>none</td>
@@ -207,7 +244,15 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 </span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#1f2328">}</span><span style="color:#fff">
 </span></span></span><span style="display:flex;"><span><span style="color:#1f2328">})</span><span style="color:#fff">
 </span></span></span></code></pre><p><code>MakeCheck</code> wraps a property as a <code>func(*testing.T)</code>, which is convenient for a table of properties or for a subtest.</p>
-<h2 id="discarding-cases">Discarding cases</h2>
+<h2 id="time-budgets">Time budgets</h2>
+<p><code>Budget(d)</code> or <code>-pbt.budget=d</code> limits the elapsed search time. The default, zero, leaves search unlimited by time. The clock starts after saved-case replay. pbt checks it before each new case, including discarded cases, targeted search steps and extended <code>CheckCoverage</code> runs.</p>
+<p>The case limit still applies, so <code>Budget</code> does not promise a minimum runtime. Raise <code>Checks</code> to run for roughly the requested duration. For a property that calls <code>Maximize</code> or <code>Minimize</code>, raise <code>SearchSteps</code> instead.</p>
+<pre style="background-color:#f7f7f7;-webkit-text-size-adjust:none;"><code><span style="display:flex;"><span>go <span style="color:#6639ba">test</span> -count<span style="color:#0550ae">=</span><span style="color:#0550ae">1</span> -run <span style="color:#0a3069">&#39;^TestQueue$&#39;</span> -pbt.checks<span style="color:#0550ae">=</span><span style="color:#0550ae">1000000</span> -pbt.budget<span style="color:#0550ae">=</span>30s
+</span></span></code></pre><p>A running case finishes before the budget takes effect. Use <code>go test -timeout</code> for a property that can hang. Replay and shrinking fall outside this budget; <code>ShrinkTime</code> separately bounds shrinking each failure or witness.</p>
+<p>A <code>Check</code> can pass with fewer than <code>Checks</code> cases when time runs out. Collected failures still fail, shrink and appear in the report. Enabled health checks and <code>CheckCoverage</code> can also fail the run; an undecided coverage requirement remains a failure. <code>CheckExists</code> fails if it finds no witness.</p>
+<p>A passing run that exhausts its budget always prints a summary, even without <code>Verbose</code>. <code>TestSearchBudget</code> uses <code>testing/synctest</code> to run three one-second cases without a real wait:</p>
+<pre style="background-color:#f7f7f7;-webkit-text-size-adjust:none;"><code><span style="display:flex;"><span>[pbt] OK, passed 3 checks in the 3s budget (seed 0x1)
+</span></span></code></pre><h2 id="discarding-cases">Discarding cases</h2>
 <p><code>t.Assume(cond)</code> discards the current case when the condition is false, as PropEr's <code>?IMPLIES</code> does. A discarded case counts neither as a pass nor as a failure, and <code>Check</code> draws another. <code>Skip</code>, <code>Skipf</code> and <code>SkipNow</code> do the same. A failure already recorded in the case takes precedence over a later discard.</p>
 <pre style="background-color:#f7f7f7;-webkit-text-size-adjust:none;"><code><span style="display:flex;"><span><span style="color:#cf222e">func</span><span style="color:#fff"> </span><span style="color:#6639ba">TestDivision</span><span style="color:#1f2328">(</span><span style="color:#1f2328">t</span><span style="color:#fff"> </span><span style="color:#0550ae">*</span><span style="color:#1f2328">testing</span><span style="color:#1f2328">.</span><span style="color:#1f2328">T</span><span style="color:#1f2328">)</span><span style="color:#fff"> </span><span style="color:#1f2328">{</span><span style="color:#fff">
 </span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#6639ba">Check</span><span style="color:#1f2328">(</span><span style="color:#1f2328">t</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#cf222e">func</span><span style="color:#1f2328">(</span><span style="color:#1f2328">t</span><span style="color:#fff"> </span><span style="color:#0550ae">*</span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#1f2328">T</span><span style="color:#1f2328">)</span><span style="color:#fff"> </span><span style="color:#1f2328">{</span><span style="color:#fff">
@@ -334,16 +379,68 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 </span></span><span style="display:flex;"><span>[pbt] s (StringOf(SampledFrom(10 values))) = &#34;7000&#34;
 </span></span><span style="display:flex;"><span>[pbt] error: parsePort(&#34;7000&#34;) rejected a valid port
 </span></span><span style="display:flex;"><span>[pbt] reproduce: go test -run &#39;TestPort&#39; -pbt.seed=0x1 -pbt.failures=2
-</span></span></code></pre><p>Two failures are different when they fail at different lines, or panic with different types or at different places. That is the same identity that keeps a shrink on one bug (chapter 3). A failure that the shrinker meets on the way, failing in a new way, becomes one of the <code>n</code> as well. Each failure gets the full <code>ShrinkTime</code> budget. The second minimum, 7000, is a local one. The true boundary is 6554, but the path to it needs a larger digit in a later place, and the shrinker does not try that. Saved failures replay together, and a run that replays a failing saved case does not search for more. <code>CheckExists</code> ignores the option.</p>
+</span></span></code></pre><p>By default, two failures are different when they fail at different lines, or panic with different types or at different places. That is the same identity that keeps a shrink on one bug (chapter 3). A failure that the shrinker meets on the way, failing in a new way, becomes one of the <code>n</code> as well. Each failure gets the full <code>ShrinkTime</code> budget. The second minimum, 7000, is a local one. The true boundary is 6554, but the path to it needs a larger digit in a later place, and the shrinker does not try that. Saved failures replay together, and a run that replays a failing saved case does not search for more. <code>CheckExists</code> ignores the option.</p>
+<p>When several causes share one assertion, call <code>t.Signature</code> with a stable name for each cause. <code>MaxFailures</code> then collects the names separately, even though every failure reaches the same line. The <a href="03-shrinking#the-failure-stays-the-same">named port example in chapter 3</a> separates an invalid port that the parser accepts from a valid port that it rejects.</p>
 <h2 id="seeds-saved-cases-and-replay">Seeds, saved cases and replay</h2>
 <p>Every report ends with a <code>reproduce:</code> line that carries the seed of the run. Passing that seed with <code>-pbt.seed</code> repeats the same sequence of cases, including the failing one, on the same version of both the property code and pbt. Updating pbt can change the generated cases for a seed. In v0.3.2 the integer generation fix changes some seeded runs. In v0.4.0, <code>Make</code> generates different values for some recursive types, and the shrinker can reach other, smaller cases. A saved case replays its choices through the generators of the installed version. After an upgrade, a saved case of a property that uses <code>Make</code> on a recursive type can produce a different value.</p>
-<p>The failing case is also saved under <code>testdata/pbt/&lt;TestName&gt;/&lt;hash&gt;</code> as a text file with the size, the drawn values as comments, and the choices. Every later <code>Check</code> of the same test replays the saved cases before generating new ones and fails if one still fails, so the regression case follows the code into version control. Delete the file to drop the case. Three options adjust this behavior: <code>NoSave</code> keeps a run from writing, <code>NoReplay</code> skips the saved cases, and <code>ReplayFile</code> or <code>-pbt.replay=FILE</code> replays one saved file in any test, which is how you hand a case from one test to another or reproduce a failure from a CI log.</p>
+<p>The failing case is also saved under <code>testdata/pbt/&lt;TestName&gt;/&lt;hash&gt;</code> as a text file with the size, the drawn values as comments, and the choices. Every later <code>Check</code> of the same test replays the saved cases before generating new ones and fails if one still fails, so the regression case follows the code into version control. Keep the file as a regression case after fixing the bug. Removing it drops that replay; do not delete it just to make a run pass. Three options adjust this behavior: <code>NoSave</code> keeps a run from writing, <code>NoReplay</code> skips the saved cases, and <code>ReplayFile</code> or <code>-pbt.replay=FILE</code> replays one saved file in any test, which is how you hand a case from one test to another or reproduce a failure from a CI log.</p>
+<p><code>HealthStale</code> warns by default when saved draw comments differ from the current replay's draws. A changed generator can turn the same choices into another input. Compare the warning's saved and current text, then test the original value explicitly if it still matters. A passing stale replay does not establish that the original regression is fixed.</p>
+<p>The comparison uses rendered text, not deep equality. Truncation can hide changes, and pbt skips draws with unstable representations such as pointers or custom formatters. <code>CheckHealth(HealthStale)</code> or <code>-pbt.checkhealth=stale</code> makes the warning fail a passing run. <code>IgnoreHealth(HealthStale)</code> hides it. Replay does not rewrite the saved comments.</p>
+<h2 id="machine-readable-output">Machine-readable output</h2>
+<p><code>ReportJSON(path)</code> or <code>-pbt.json=path</code> appends one JSON line after each <code>Check</code> or <code>CheckExists</code>. The default empty path disables output. Create the parent directory first. The schema name is <code>go.ymotongpoo.com/pbt/report/v1</code>; readers should ignore unknown fields.</p>
+<table>
+<thead>
+<tr>
+<th>Fields</th>
+<th>Contents</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>test</code>, <code>seed</code>, <code>kind</code>, <code>status</code>, <code>errors</code></td>
+<td>test name, hexadecimal seed, <code>check</code> or <code>exists</code>, outcome and error messages</td>
+</tr>
+<tr>
+<td><code>checks_passed</code>, <code>rejected</code>, <code>discards</code></td>
+<td>search counts, excluding replay and shrinking; <code>rejected</code> counts failing candidates</td>
+</tr>
+<tr>
+<td><code>budget_exhausted</code>, <code>durations_seconds</code></td>
+<td>whether time ended the search, plus total, search and shrink durations</td>
+</tr>
+<tr>
+<td><code>failures</code>, <code>witness</code></td>
+<td>failure identities, rendered draws, saved paths and reproduction commands; <code>witness</code> appears only after successful <code>CheckExists</code></td>
+</tr>
+<tr>
+<td><code>health</code>, <code>statistics</code>, <code>objectives</code></td>
+<td>diagnostics, labels, coverage requirements, measurements and best utilities</td>
+</tr>
+</tbody>
+</table>
+<p><code>status</code> is <code>passed</code>, <code>failed</code>, <code>gave_up</code>, <code>no_witness</code> or <code>error</code>. Draw values are rendered strings and follow <code>ReportLimit</code> and <code>ReportDepth</code>. Non-finite numbers use the strings <code>NaN</code>, <code>+Inf</code> and <code>-Inf</code>.</p>
+<pre style="background-color:#f7f7f7;-webkit-text-size-adjust:none;"><code><span style="display:flex;"><span><span style="color:#cf222e">func</span><span style="color:#fff"> </span><span style="color:#6639ba">checkRecordedRun</span><span style="color:#1f2328">(</span><span style="color:#1f2328">tb</span><span style="color:#fff"> </span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#1f2328">TB</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#1f2328">reportPath</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#1f2328">observationDir</span><span style="color:#fff"> </span><span style="color:#cf222e">string</span><span style="color:#1f2328">)</span><span style="color:#fff"> </span><span style="color:#1f2328">{</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#6639ba">Check</span><span style="color:#1f2328">(</span><span style="color:#1f2328">tb</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#cf222e">func</span><span style="color:#1f2328">(</span><span style="color:#1f2328">t</span><span style="color:#fff"> </span><span style="color:#0550ae">*</span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#1f2328">T</span><span style="color:#1f2328">)</span><span style="color:#fff"> </span><span style="color:#1f2328">{</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">		</span><span style="color:#1f2328">n</span><span style="color:#fff"> </span><span style="color:#0550ae">:=</span><span style="color:#fff"> </span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#6639ba">IntRange</span><span style="color:#1f2328">(</span><span style="color:#0550ae">0</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#0550ae">9</span><span style="color:#1f2328">).</span><span style="color:#6639ba">Draw</span><span style="color:#1f2328">(</span><span style="color:#1f2328">t</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#0a3069">&#34;n&#34;</span><span style="color:#1f2328">)</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">		</span><span style="color:#1f2328">t</span><span style="color:#1f2328">.</span><span style="color:#6639ba">Classify</span><span style="color:#1f2328">(</span><span style="color:#1f2328">n</span><span style="color:#0550ae">%</span><span style="color:#0550ae">2</span><span style="color:#fff"> </span><span style="color:#0550ae">==</span><span style="color:#fff"> </span><span style="color:#0550ae">0</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#0a3069">&#34;even&#34;</span><span style="color:#1f2328">)</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">		</span><span style="color:#cf222e">if</span><span style="color:#fff"> </span><span style="color:#1f2328">n</span><span style="color:#fff"> </span><span style="color:#1f2328">&lt;</span><span style="color:#fff"> </span><span style="color:#0550ae">0</span><span style="color:#fff"> </span><span style="color:#0550ae">||</span><span style="color:#fff"> </span><span style="color:#1f2328">n</span><span style="color:#fff"> </span><span style="color:#1f2328">&gt;</span><span style="color:#fff"> </span><span style="color:#0550ae">9</span><span style="color:#fff"> </span><span style="color:#1f2328">{</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">			</span><span style="color:#1f2328">t</span><span style="color:#1f2328">.</span><span style="color:#6639ba">Fatalf</span><span style="color:#1f2328">(</span><span style="color:#0a3069">&#34;out of range: %d&#34;</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#1f2328">n</span><span style="color:#1f2328">)</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">		</span><span style="color:#1f2328">}</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#1f2328">},</span><span style="color:#fff"> </span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#6639ba">Seed</span><span style="color:#1f2328">(</span><span style="color:#0550ae">1</span><span style="color:#1f2328">),</span><span style="color:#fff"> </span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#6639ba">Checks</span><span style="color:#1f2328">(</span><span style="color:#0550ae">3</span><span style="color:#1f2328">),</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">		</span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#6639ba">ReportJSON</span><span style="color:#1f2328">(</span><span style="color:#1f2328">reportPath</span><span style="color:#1f2328">),</span><span style="color:#fff"> </span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#6639ba">Observations</span><span style="color:#1f2328">(</span><span style="color:#1f2328">observationDir</span><span style="color:#1f2328">))</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#1f2328">}</span><span style="color:#fff">
+</span></span></span></code></pre><p><code>TestMachineReadableOutput</code> checks both files. This is its JSON report with durations, statistics and empty collections omitted; all shown fields retain their captured values:</p>
+<pre style="background-color:#f7f7f7;-webkit-text-size-adjust:none;"><code><span style="display:flex;"><span><span style="color:#1f2328">{</span><span style="color:#0550ae">&#34;schema&#34;</span><span style="color:#1f2328">:</span><span style="color:#0a3069">&#34;go.ymotongpoo.com/pbt/report/v1&#34;</span><span style="color:#1f2328">,</span><span style="color:#0550ae">&#34;test&#34;</span><span style="color:#1f2328">:</span><span style="color:#0a3069">&#34;TestRecordedRun&#34;</span><span style="color:#1f2328">,</span><span style="color:#0550ae">&#34;seed&#34;</span><span style="color:#1f2328">:</span><span style="color:#0a3069">&#34;0x1&#34;</span><span style="color:#1f2328">,</span><span style="color:#0550ae">&#34;kind&#34;</span><span style="color:#1f2328">:</span><span style="color:#0a3069">&#34;check&#34;</span><span style="color:#1f2328">,</span><span style="color:#0550ae">&#34;status&#34;</span><span style="color:#1f2328">:</span><span style="color:#0a3069">&#34;passed&#34;</span><span style="color:#1f2328">,</span><span style="color:#0550ae">&#34;checks_passed&#34;</span><span style="color:#1f2328">:</span><span style="color:#0550ae">3</span><span style="color:#1f2328">,</span><span style="color:#0550ae">&#34;rejected&#34;</span><span style="color:#1f2328">:</span><span style="color:#0550ae">0</span><span style="color:#1f2328">,</span><span style="color:#0550ae">&#34;discards&#34;</span><span style="color:#1f2328">:</span><span style="color:#0550ae">0</span><span style="color:#1f2328">,</span><span style="color:#0550ae">&#34;budget_exhausted&#34;</span><span style="color:#1f2328">:</span><span style="color:#cf222e">false</span><span style="color:#1f2328">}</span>
+</span></span></code></pre><p><code>Observations(dir)</code> or <code>-pbt.observe=dir</code> appends OpenPBTStats records that Tyche reads. The default empty directory disables observations. pbt creates the directory and writes one file per sanitized test name, such as <code>observations/TestRecordedRun.jsonl</code>. Subtest names create subdirectories. Sanitized names can collide; <code>property</code> and <code>run_start</code> distinguish records in a shared file.</p>
+<p>Each <code>test_case</code> record includes the input, outcome, generation phase, features and timings. Features include labels, measurements, coverage-requirement hits and target utilities. Timings separate input generation from test execution. Replay and shrink attempts also produce records. A <code>minimal</code> record with <code>metadata.final=true</code> is a snapshot, not another execution. An <code>info</code> record ends the run. The <code>coverage</code> field is currently null, even with <code>CoverageGuided</code>.</p>
+<pre style="background-color:#f7f7f7;-webkit-text-size-adjust:none;"><code><span style="display:flex;"><span>go <span style="color:#6639ba">test</span> -count<span style="color:#0550ae">=</span><span style="color:#0550ae">1</span> ./... -pbt.json<span style="color:#0550ae">=</span>runs.jsonl -pbt.observe<span style="color:#0550ae">=</span>observations
+</span></span></code></pre><p>A log shipper can tail these files and forward records or derived counts to a log or metrics backend. pbt writes files locally and does not send them over the network. Observations use buffering and flush at the end of a run; abrupt termination can lose buffered records. A write error fails the test, because the requested output was not delivered.</p>
 
 <div class="pager">
 <span>← <a href="03-shrinking">Shrinking</a></span>
 <span><a href="05-stateful">Stateful testing</a> →</span>
 </div>
-<footer>pbt user guide for pbt v0.4.0 · <a href="https://github.com/ymotongpoo/pbt/tree/main/docs/guide">source</a> · Apache License 2.0</footer>
+<footer>pbt user guide for pbt v0.5.0 · <a href="https://github.com/ymotongpoo/pbt/tree/main/docs/guide">source</a> · Apache License 2.0</footer>
 </main>
 </div>
 </body>

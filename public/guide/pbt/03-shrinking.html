@@ -52,7 +52,7 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 <div class="layout">
 <nav class="side">
 <h1><a href="./">pbt user guide</a></h1>
-<div class="version">pbt v0.4.0</div>
+<div class="version">pbt v0.5.0</div>
 <ol>
 <li><a href="./">Getting started</a></li>
 <li><a href="01-generators">Generators</a></li>
@@ -66,6 +66,7 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 <li><a href="09-types">Generators from types</a></li>
 <li><a href="10-formats">Standard formats</a></li>
 <li><a href="11-reference">Where to go next</a></li>
+<li><a href="12-agents">Testing a project with an agent</a></li>
 </ol>
 <div class="lang"><a href="ja/03-shrinking">日本語</a></div>
 <div class="lang"><a href="https://pkg.go.dev/go.ymotongpoo.com/pbt">pkg.go.dev</a> · <a href="https://github.com/ymotongpoo/pbt">GitHub</a></div>
@@ -204,6 +205,34 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 </span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#1f2328">}</span><span style="color:#fff">
 </span></span></span><span style="display:flex;"><span><span style="color:#1f2328">}</span><span style="color:#fff">
 </span></span></span></code></pre><p>Suppose the first failing case is a quantity of 3000, which panics. Without the rule, the shrinker would lower the quantity past 1000, find that 101 fails the assertion, and report a wrong discount; the panic would be gone from the report. With the rule, the quantity shrinks to 1001 and the report shows the panic. When the first failure is the wrong discount, the case shrinks to 101 instead. Either way, the report describes the bug the run found. A stateful test keys its failures by command and check, so a failing postcondition of one command cannot turn into the panic of another.</p>
+<p>One assertion site can cover several causes. <code>t.Signature(name)</code> assigns a stable name to the cause for the current case. This version of the <a href="04-properties#several-failures-in-one-run">port property in chapter 4</a> uses one <code>Fatalf</code> for both bugs:</p>
+<pre style="background-color:#f7f7f7;-webkit-text-size-adjust:none;"><code><span style="display:flex;"><span><span style="color:#57606a">// parsePort is the parser with two bugs from chapter 4.</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#cf222e">var</span><span style="color:#fff"> </span><span style="color:#1f2328">namedPortProperty</span><span style="color:#fff"> </span><span style="color:#1f2328">=</span><span style="color:#fff"> </span><span style="color:#cf222e">func</span><span style="color:#1f2328">(</span><span style="color:#1f2328">t</span><span style="color:#fff"> </span><span style="color:#0550ae">*</span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#1f2328">T</span><span style="color:#1f2328">)</span><span style="color:#fff"> </span><span style="color:#1f2328">{</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#1f2328">s</span><span style="color:#fff"> </span><span style="color:#0550ae">:=</span><span style="color:#fff"> </span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#6639ba">StringOf</span><span style="color:#1f2328">(</span><span style="color:#1f2328">pbt</span><span style="color:#1f2328">.</span><span style="color:#6639ba">SampledFrom</span><span style="color:#1f2328">([]</span><span style="color:#6639ba">rune</span><span style="color:#1f2328">(</span><span style="color:#0a3069">&#34;0123456789&#34;</span><span style="color:#1f2328">))).</span><span style="color:#6639ba">Draw</span><span style="color:#1f2328">(</span><span style="color:#1f2328">t</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#0a3069">&#34;s&#34;</span><span style="color:#1f2328">)</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#1f2328">_</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#1f2328">accepted</span><span style="color:#fff"> </span><span style="color:#0550ae">:=</span><span style="color:#fff"> </span><span style="color:#6639ba">parsePort</span><span style="color:#1f2328">(</span><span style="color:#1f2328">s</span><span style="color:#1f2328">)</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#1f2328">want</span><span style="color:#fff"> </span><span style="color:#0550ae">:=</span><span style="color:#fff"> </span><span style="color:#6639ba">validPort</span><span style="color:#1f2328">(</span><span style="color:#1f2328">s</span><span style="color:#1f2328">)</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#cf222e">if</span><span style="color:#fff"> </span><span style="color:#1f2328">accepted</span><span style="color:#fff"> </span><span style="color:#0550ae">!=</span><span style="color:#fff"> </span><span style="color:#1f2328">want</span><span style="color:#fff"> </span><span style="color:#1f2328">{</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">		</span><span style="color:#1f2328">cause</span><span style="color:#fff"> </span><span style="color:#0550ae">:=</span><span style="color:#fff"> </span><span style="color:#0a3069">&#34;rejected valid port&#34;</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">		</span><span style="color:#cf222e">if</span><span style="color:#fff"> </span><span style="color:#1f2328">accepted</span><span style="color:#fff"> </span><span style="color:#1f2328">{</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">			</span><span style="color:#1f2328">cause</span><span style="color:#fff"> </span><span style="color:#1f2328">=</span><span style="color:#fff"> </span><span style="color:#0a3069">&#34;accepted invalid port&#34;</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">		</span><span style="color:#1f2328">}</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">		</span><span style="color:#1f2328">t</span><span style="color:#1f2328">.</span><span style="color:#6639ba">Signature</span><span style="color:#1f2328">(</span><span style="color:#1f2328">cause</span><span style="color:#1f2328">)</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">		</span><span style="color:#1f2328">t</span><span style="color:#1f2328">.</span><span style="color:#6639ba">Fatalf</span><span style="color:#1f2328">(</span><span style="color:#0a3069">&#34;parsePort(%q): %s&#34;</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#1f2328">s</span><span style="color:#1f2328">,</span><span style="color:#fff"> </span><span style="color:#1f2328">cause</span><span style="color:#1f2328">)</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#fff">	</span><span style="color:#1f2328">}</span><span style="color:#fff">
+</span></span></span><span style="display:flex;"><span><span style="color:#1f2328">}</span><span style="color:#fff">
+</span></span></span></code></pre><p>Running it with <code>Seed(1)</code> and <code>MaxFailures(2)</code> produces:</p>
+<pre style="background-color:#f7f7f7;-webkit-text-size-adjust:none;"><code><span style="display:flex;"><span>[pbt] failure 1 of 2: property failed after 6 passed checks and 9 shrink steps (size 4)
+</span></span><span style="display:flex;"><span>[pbt] failure was named &#34;accepted invalid port&#34;
+</span></span><span style="display:flex;"><span>[pbt] s (StringOf(SampledFrom(10 values))) = &#34;0&#34;
+</span></span><span style="display:flex;"><span>[pbt] error: parsePort(&#34;0&#34;): accepted invalid port
+</span></span><span style="display:flex;"><span>[pbt] reproduce: go test -run &#39;TestNamedPort&#39; -pbt.seed=0x1 -pbt.failures=2
+</span></span><span style="display:flex;"><span>[pbt] failure 2 of 2: property failed after 6 passed checks and 90 shrink steps (size 8)
+</span></span><span style="display:flex;"><span>[pbt] failure was named &#34;rejected valid port&#34;
+</span></span><span style="display:flex;"><span>[pbt] s (StringOf(SampledFrom(10 values))) = &#34;7000&#34;
+</span></span><span style="display:flex;"><span>[pbt] error: parsePort(&#34;7000&#34;): rejected valid port
+</span></span><span style="display:flex;"><span>[pbt] reproduce: go test -run &#39;TestNamedPort&#39; -pbt.seed=0x1 -pbt.failures=2
+</span></span></code></pre><p>The name replaces the assertion site, panic type and site, or stateful command check as the failure identity. Shrinking keeps that name, and <code>MaxFailures</code> counts different names as different failures. The same identity determines saved-file suffixes when collecting several failures and the replay comparison for <code>HealthFlaky</code>.</p>
+<p>Choose names for causes, without generated values. Otherwise each value can become a separate failure and prevent shrinking. Without <code>Signature</code>, the automatic identity still applies. A call before or after a failure works; the last call wins, including deferred calls and cleanup callbacks. <code>Conjunction</code> shares one case, so a signature in any member names the whole case. A passing case ignores the name.</p>
 <h2 id="when-a-failure-does-not-recur">When a failure does not recur</h2>
 <p>Before shrinking, <code>Check</code> replays the failing case once with the same choices. A property that depends only on its input fails again, in the same way. The replay can pass, discard the case or fail at another place. Then the property or a generator depends on something besides the choices, such as a clock, a global variable or the order of goroutines. The report then carries a <code>HealthFlaky</code> note.</p>
 <pre style="background-color:#f7f7f7;-webkit-text-size-adjust:none;"><code><span style="display:flex;"><span><span style="color:#57606a">// The cache keeps a hit counter across cases, so the outcome of a case</span><span style="color:#fff">
@@ -229,7 +258,7 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 <span>← <a href="02-distribution">Size, distribution and statistics</a></span>
 <span><a href="04-properties">Properties and runs</a> →</span>
 </div>
-<footer>pbt user guide for pbt v0.4.0 · <a href="https://github.com/ymotongpoo/pbt/tree/main/docs/guide">source</a> · Apache License 2.0</footer>
+<footer>pbt user guide for pbt v0.5.0 · <a href="https://github.com/ymotongpoo/pbt/tree/main/docs/guide">source</a> · Apache License 2.0</footer>
 </main>
 </div>
 </body>

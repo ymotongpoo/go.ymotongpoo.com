@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>エージェントでプロジェクトをテストする · pbt 利用ガイド</title>
+<link rel="canonical" href="https://go.ymotongpoo.com/pbt/guide/ja/12-agents">
+<link rel="alternate" type="text/markdown" href="12-agents.md">
+<link rel="describedby" type="text/markdown" href="/pbt/llms.txt">
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-EC4QPYV95Y"></script>
+<script>
+window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'G-EC4QPYV95Y');
+</script>
+<style>
+:root { --fg: #1f2328; --muted: #59636e; --line: #d1d9e0; --accent: #0969da; --bg: #fff; --code: #f6f8fa; }
+* { box-sizing: border-box; }
+body { margin: 0; color: var(--fg); background: var(--bg); font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, "Hiragino Sans", "Noto Sans JP", sans-serif; }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+.layout { display: grid; grid-template-columns: 16rem minmax(0, 1fr); min-height: 100vh; }
+nav.side { border-right: 1px solid var(--line); padding: 1.5rem 1rem; font-size: 0.92rem; }
+nav.side h1 { font-size: 1rem; margin: 0 0 0.25rem; }
+nav.side .version { color: var(--muted); font-size: 0.8rem; margin-bottom: 1rem; }
+nav.side ol { list-style: none; padding: 0; margin: 0; }
+nav.side li { margin: 0.2rem 0; }
+nav.side li.current a { font-weight: 600; color: var(--fg); }
+nav.side .lang { margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--line); }
+main { padding: 2rem 3rem 4rem; max-width: 52rem; }
+main h1 { font-size: 1.9rem; line-height: 1.25; margin-top: 0; }
+main h2 { font-size: 1.35rem; margin-top: 2.2rem; border-bottom: 1px solid var(--line); padding-bottom: 0.2rem; }
+main h3 { font-size: 1.1rem; margin-top: 1.6rem; }
+code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.88em; }
+p code, li code, td code { background: var(--code); padding: 0.1em 0.3em; border-radius: 4px; }
+pre { background: var(--code) !important; padding: 0.9rem 1rem; border-radius: 6px; overflow-x: auto; line-height: 1.5; }
+table { border-collapse: collapse; margin: 1rem 0; font-size: 0.92rem; }
+th, td { border: 1px solid var(--line); padding: 0.35rem 0.6rem; text-align: left; vertical-align: top; }
+th { background: var(--code); }
+blockquote { margin: 1rem 0; padding: 0.2rem 1rem; border-left: 4px solid var(--line); color: var(--muted); }
+.pager { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--line); gap: 1rem; }
+footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
+@media (max-width: 760px) {
+  .layout { grid-template-columns: 1fr; }
+  nav.side { border-right: 0; border-bottom: 1px solid var(--line); }
+  main { padding: 1.5rem 1.2rem 3rem; }
+}
+</style>
+</head>
+<body>
+<div class="layout">
+<nav class="side">
+<h1><a href="./">pbt 利用ガイド</a></h1>
+<div class="version">pbt v0.5.0</div>
+<ol>
+<li><a href="./">はじめに</a></li>
+<li><a href="01-generators">生成器</a></li>
+<li><a href="02-distribution">サイズ、分布、統計</a></li>
+<li><a href="03-shrinking">縮小</a></li>
+<li><a href="04-properties">プロパティと実行</a></li>
+<li><a href="05-stateful">ステートフルテスト</a></li>
+<li><a href="06-parallel">並行テスト</a></li>
+<li><a href="07-fsm">状態機械</a></li>
+<li><a href="08-targeted">標的型探索と存在性</a></li>
+<li><a href="09-types">型から導く生成器</a></li>
+<li><a href="10-formats">規格が定める形式</a></li>
+<li><a href="11-reference">次に読むもの</a></li>
+<li class="current"><a href="12-agents">エージェントでプロジェクトをテストする</a></li>
+</ol>
+<div class="lang"><a href="../12-agents">English</a></div>
+<div class="lang"><a href="https://pkg.go.dev/go.ymotongpoo.com/pbt">pkg.go.dev</a> · <a href="https://github.com/ymotongpoo/pbt">GitHub</a></div>
+<div class="lang"><a href="12-agents.md">Markdown</a> · <a href="/pbt/llms.txt">llms.txt</a></div>
+</nav>
+<main>
+<h1 id="エージェントでプロジェクトをテストする">エージェントでプロジェクトをテストする</h1>
+<p>まず、失敗したときにプロジェクトにとって意味のある、少数のプロパティから始めてください。プロパティごとに、期待する振る舞いの出典と結果を一緒に記録しておきます。役に立つ結果とは、プロジェクトの契約と食い違うことを再現でき、その証拠を残すテストが付いているものです。</p>
+<h2 id="契約を確かめる">契約を確かめる</h2>
+<p>テスト対象のコードのドキュメント、公開されている型、既存のテスト、フィクスチャーを読んでください。プロジェクトが従うと約束している規格も探します。これらの資料が、妥当な入力、許されるエラー、期待する結果を定めます。オラクルを選ぶ前に、資料どうしの食い違いを記録しておきます。</p>
+<p>基本的な規則からもプロパティが得られます。妥当なリクエストでパニックしないこと、保存したデータが消えないこと、操作が終わることです。規則ごとに、その適用範囲を書いておいてください。例えば、不正な入力でパニックすることがドキュメントに書かれていれば、妥当な入力についての約束には反しません。</p>
+<p>バグがあったときに最も害の大きい場所をいくつか選びます。それぞれについて、入力の定義域、期待する結果、それを求める出典を書き出します。該当する文があれば引用してください。契約があいまいなままなら、要件を作り出さずに、決まっていない点を特定します。</p>
+<h2 id="オラクルを選ぶ">オラクルを選ぶ</h2>
+<p><strong>オラクル</strong>は、観測した結果が正しいかどうかを判定する仕組みです。手間の少ないものから始め、別の種類の誤りを捉えられる箇所に独立した検査を足してください。</p>
+<table>
+<thead>
+<tr>
+<th>オラクル（手間の少ない順）</th>
+<th>プロパティとpbtの道具</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>パニックしない</td>
+<td><a href="04-properties#%E3%83%91%E3%83%8B%E3%83%83%E3%82%AF">NoPanic</a>で型から関数の引数を生成するか、<code>Check</code> の中で関数を呼ぶ。パニックはケースを失敗にする</td>
+</tr>
+<tr>
+<td>往復</td>
+<td><code>ForAll</code> か <code>Draw</code> で値を生成し、符号化して復号し、<code>Fatalf</code> で比べる。ドキュメントにある正規化は考慮する。<a href="01-generators">生成器</a>と<a href="10-formats">形式</a>を参照</td>
+</tr>
+<tr>
+<td>参照モデル</td>
+<td>期待する状態の小さなモデルを持ち、<a href="05-stateful">Commandsと事後条件</a>で操作を比べる。ケースごとにシステムをリセットする</td>
+</tr>
+<tr>
+<td>各ステップの後の不変条件</td>
+<td>保存則、順序、所有関係を各コマンドの <code>Post</code> で確かめる。<code>Post</code> が見るのは <code>Next</code> の前のモデル</td>
+</tr>
+<tr>
+<td>メタモルフィックな検査</td>
+<td>1つの入力を取り出して変換し、関係する結果を1つのプロパティの中で比べる。例えば、順序に依存しないとドキュメントにある操作は、並べ替えても結果が変わらない</td>
+</tr>
+<tr>
+<td>差分の検査</td>
+<td>取り出した同じ入力を独立した2つの実装に渡し、<code>Fatalf</code> で結果を比べる。先に、その入力の定義域で両者の契約が一致することを確かめる</td>
+</tr>
+</tbody>
+</table>
+<p>止まるおそれがあるなら、<code>go test -timeout</code> を設定してください。<a href="04-properties#%E3%83%97%E3%83%AD%E3%83%91%E3%83%86%E3%82%A3%E3%82%92%E7%B5%84%E3%81%BF%E5%90%88%E3%82%8F%E3%81%9B%E3%82%8B">Deadlineのコンビネーター</a>は、呼び出しが戻った後でしか経過時間を確かめません。2つの実装の違いは調べるべき証拠であって、どちらかの実装が誤っていることの証明ではありません。</p>
+<h2 id="契約を突く入力を組む">契約を突く入力を組む</h2>
+<p>広い生成器を <code>Filter</code> や <code>Assume</code> で絞るより、<a href="01-generators">妥当な入力を組み立てる生成器</a>を選んでください。依存するフィールドには <code>Bind</code> を、選択肢の配分には <code>Frequency</code> を使います。既存のテストやフィクスチャーにある境界の値も、生成した値と一緒に入れます。不正な入力についてのプロパティは分けておき、期待するエラーを明示したままにします。</p>
+<p>規格に沿った文字列の入力には、<a href="10-formats">formatパッケージ</a>を使ってください。プロジェクトが規格の文法全体を受け付けるのか、一般的な形だけを受け付けるのかを確かめます。Goの型には<a href="09-types">Makeかpbtgen</a>を使い、型で表せない制約はフィールドの上書きで与えます。</p>
+<p>ステートフルなコードには、<a href="05-stateful">コマンドの列</a>を生成してください。個々の呼び出しを独立に試すだけでは、期限の切れたリースや、未処理の仕事を残して閉じたキューのような状態にはまず届きません。モデルを変えるのは <code>init</code> と <code>Next</code> だけにし、生成器と検査はモデルを読むだけにします。外部の状態、時計、資源は、縮小や診断のための再実行も含めて、実行のたびにリセットしてください。</p>
+<p>分布は<a href="02-distribution">Classify、Cover、CheckCoverage</a>で測ります。失敗したときの影響が大きい操作と、境界値のケースにはラベルを付けます。ある種類のケースが欠けると実験が成り立たないなら、最低限の割合を要求してください。チェック数を増やす前に、ヘルスチェックの警告を確かめます。大きな探索で選択の重複が無駄になるなら、<code>WarnHealth(HealthDuplicate)</code> を有効にします。</p>
+<h2 id="段階を踏んで走らせる">段階を踏んで走らせる</h2>
+<p>まず、変更したパッケージをデフォルトの100チェックでコンパイルして実行します。統計と警告を確かめてから、ケースの数を増やし、記録したいくつかのシードで試してください。次のコマンドは、今のパッケージに <code>TestQueue</code> という名前のプロパティがあるものとしています。</p>
+<pre style="background-color:#f7f7f7;-webkit-text-size-adjust:none;"><code><span style="display:flex;"><span>go <span style="color:#6639ba">test</span> -count<span style="color:#0550ae">=</span><span style="color:#0550ae">1</span> -run <span style="color:#0a3069">&#39;^TestQueue$&#39;</span> -pbt.v
+</span></span><span style="display:flex;"><span>go <span style="color:#6639ba">test</span> -count<span style="color:#0550ae">=</span><span style="color:#0550ae">1</span> -run <span style="color:#0a3069">&#39;^TestQueue$&#39;</span> -pbt.checks<span style="color:#0550ae">=</span><span style="color:#0550ae">10000</span> -pbt.seed<span style="color:#0550ae">=</span><span style="color:#0550ae">1</span>
+</span></span><span style="display:flex;"><span>go <span style="color:#6639ba">test</span> -count<span style="color:#0550ae">=</span><span style="color:#0550ae">1</span> -run <span style="color:#0a3069">&#39;^TestQueue$&#39;</span> -pbt.checks<span style="color:#0550ae">=</span><span style="color:#0550ae">10000</span> -pbt.seed<span style="color:#0550ae">=</span><span style="color:#0550ae">2</span>
+</span></span><span style="display:flex;"><span>go <span style="color:#6639ba">test</span> -count<span style="color:#0550ae">=</span><span style="color:#0550ae">1</span> -run <span style="color:#0a3069">&#39;^TestQueue$&#39;</span> -pbt.checks<span style="color:#0550ae">=</span><span style="color:#0550ae">1000000</span> -pbt.budget<span style="color:#0550ae">=</span>30s -pbt.seed<span style="color:#0550ae">=</span><span style="color:#0550ae">3</span>
+</span></span></code></pre><p><a href="04-properties#%E6%99%82%E9%96%93%E4%BA%88%E7%AE%97">Budget</a>は探索の時間に上限を設けますが、ケースの数の上限で先に終わることもあります。標的型のプロパティでは <code>-pbt.searchsteps</code> を大きくしてください。どちらの設定も、止まった呼び出しを中断しません。</p>
+<p><code>-pbt.failures=3</code> を使うと、1回の実行で複数の原因を集められます。原因が同じアサーションの位置を共有するときは、安定した<a href="03-shrinking#%E5%A4%B1%E6%95%97%E3%81%AF%E5%90%8C%E3%81%98%E3%82%82%E3%81%AE%E3%81%AB%E4%BF%9D%E3%81%9F%E3%82%8C%E3%82%8B">Signatureの名前</a>を付けてください。実行の結果は、コンソールの文字列を解析するかわりに <code>-pbt.json=runs.jsonl</code> から読みます。<a href="04-properties#%E6%A9%9F%E6%A2%B0%E5%8F%AF%E8%AA%AD%E3%81%AE%E5%87%BA%E5%8A%9B">Tycheが読むOpenPBTStatsの記録</a>には <code>-pbt.observe=observations</code> を使います。</p>
+<p>入れ子の比較のせいでランダムな探索が進まないときは、<a href="08-targeted#%E3%82%B3%E3%83%BC%E3%83%89%E3%82%AB%E3%83%90%E3%83%AC%E3%83%83%E3%82%B8%E3%81%A7%E6%8E%A2%E7%B4%A2%E3%81%99%E3%82%8B">CoverageGuided</a>を試してください。</p>
+<pre style="background-color:#f7f7f7;-webkit-text-size-adjust:none;"><code><span style="display:flex;"><span>go <span style="color:#6639ba">test</span> -count<span style="color:#0550ae">=</span><span style="color:#0550ae">1</span> -run <span style="color:#0a3069">&#39;^TestQueue$&#39;</span> -cover -coverpkg<span style="color:#0550ae">=</span>./... -pbt.coverage -pbt.checks<span style="color:#0550ae">=</span><span style="color:#0550ae">10000</span>
+</span></span></code></pre><p><code>-coverpkg</code> でテスト対象のパッケージを選びます。カバレッジのカウンターはプロセス全体のものなので、プロパティを単独で実行し、並行するテストを避けてください。カバレッジによる誘導はオラクルの代わりにはならず、プロパティにはアサーションが引き続き必要です。</p>
+<h2 id="失敗を調べる">失敗を調べる</h2>
+<p><code>testdata/pbt</code> の下の保存したケースは残し、報告の <code>reproduce:</code> のコマンドを実行してください。特定の保存したケースを再実行するには <code>-pbt.replay=FILE</code> を使います。Go、pbt、プロジェクトのバージョンを記録しておきます。生成器が変わると、保存した選択の意味が変わることがあるからです。<code>HealthStale</code> の警告が出たら、再実行が元の入力を試していると考える前に、その内容を確かめてください。</p>
+<p>欠陥を調べやすくなるなら、最小の入力を通常の回帰テストに書き足します。そのテストが、変更していないコードで失敗することを確かめてください。逐次のステートフルテストの失敗では、<a href="05-stateful#%E5%A4%B1%E6%95%97%E3%82%92%E6%8B%9B%E3%81%84%E3%81%9F%E6%89%8B%E3%82%92%E6%8E%A2%E3%81%99">Causality</a>が、失敗を起こりやすくした手前のコマンドを示唆します。標本から得た割合は調査の手がかりであって、それだけで原因を確定するものではありません。</p>
+<table>
+<thead>
+<tr>
+<th>判定</th>
+<th>兆候</th>
+<th>次の行動</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>本物のバグ</td>
+<td>妥当な入力が、記録した契約と矛盾する結果を返す</td>
+<td>再現手順を残し、食い違いを報告する。実装の修正は、依頼された範囲に限る</td>
+</tr>
+<tr>
+<td>テストのバグ</td>
+<td>生成器が事前条件を破る、モデルが状態を漏らす、比較がドキュメントにない規則を前提にしている</td>
+<td>その誤りだけを正し、理由を記録して、影響するプロパティを再実行する</td>
+</tr>
+<tr>
+<td>意図された振る舞い</td>
+<td>ドキュメントか既存のテストが、この結果を明示的に許している</td>
+<td>期待を契約に合わせ、ドキュメントにある振る舞いのテストを残す</td>
+</tr>
+<tr>
+<td>環境</td>
+<td>結果が時計、プラットフォーム、サービス、足りないツール、資源の上限に左右される</td>
+<td>依存を記録し、できるなら制御し、ライブラリの欠陥とみなす前に再実行する</td>
+</tr>
+</tbody>
+</table>
+<p>同じ原因を二度報告しないように、関連する既存の調査結果やissueを確かめてください。制御した再実行で振る舞いが変わっても、元の観測は残しておきます。不確かな点は、不確かなまま書きます。</p>
+<h2 id="通過したテストを広げる">通過したテストを広げる</h2>
+<p>通過した実行が示すのは、生成したケースと、実行したアサーションの範囲だけです。次に何を変えるかは、その実行が残した証拠から選んでください。</p>
+<ul>
+<li>ラベルとコマンドの統計を見て、欠けている形や状態を探します。重みを変えるか生成器に分岐を足し、もう一度測ります。</li>
+<li><code>go test -cover -coverprofile=coverage.out</code> の後に <code>go tool cover -func=coverage.out</code> を実行してコードカバレッジを調べます。到達していない経路を、欠けている入力や操作まで遡ります。</li>
+<li>同じコードに新しいオラクルを足します。往復の検査は、両方向が同じバグを共有していれば通過してしまいますが、独立したモデルならそれを見つけられることがあります。</li>
+<li><code>Assume</code>、<code>Filter</code>、明示的な除外が取り除くものを数えます。除外が、重要なケースを隠していないかを確かめてください。</li>
+<li>長い入力やプログラムを試すには <code>-pbt.maxsize</code> を上げ、生成の手間を見張ります。別のシードも試し、その結果を記録します。</li>
+<li>変更を重ねても、試す入力やアサーションが改善しなくなったら、プロジェクトの別の部分へ移ります。</li>
+</ul>
+<h2 id="証拠を残す">証拠を残す</h2>
+<p>失敗を消すために、プロパティを弱めたり削除したりしないでください。誤ったオラクルを直すのは、契約に基づく証拠があるときだけです。実行を通すために、保存したケースを削除しないでください。失敗するテストで欠陥を示すまでは、テスト対象のコードを変えないでください。</p>
+<p>バグの報告には、試したバージョン、最小の入力、正確なコマンド、期待した結果、実際の結果を入れます。期待する振る舞いを求めているドキュメントの文も添えてください。規則の出典が型や規格なら、その出典を示します。走らせたケースの数、失敗したプロパティ、切り分けの判定、試していない範囲も報告します。ほかの人が結果を確かめられるように、再現手順を報告と一緒に残してください。</p>
+
+<div class="pager">
+<span>← <a href="11-reference">次に読むもの</a></span>
+<span></span>
+</div>
+<footer>pbt 利用ガイド for pbt v0.5.0 · <a href="https://github.com/ymotongpoo/pbt/tree/main/docs/guide">source</a> · Apache License 2.0</footer>
+</main>
+</div>
+</body>
+</html>
