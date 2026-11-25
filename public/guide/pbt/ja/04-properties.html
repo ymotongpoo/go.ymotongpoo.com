@@ -52,7 +52,7 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 <div class="layout">
 <nav class="side">
 <h1><a href="./">pbt 利用ガイド</a></h1>
-<div class="version">pbt v0.5.2</div>
+<div class="version">pbt v0.5.3</div>
 <ol>
 <li><a href="./">はじめに</a></li>
 <li><a href="01-generators">生成器</a></li>
@@ -432,15 +432,67 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 </span></span></span></code></pre><p><code>TestMachineReadableOutput</code> は両方のファイルを確かめます。次はそのJSONの報告から、所要時間、統計、空のコレクションを省いたものです。載せたフィールドの値は、取得したままです。</p>
 <pre style="background-color:#f7f7f7;-webkit-text-size-adjust:none;"><code><span style="display:flex;"><span><span style="color:#1f2328">{</span><span style="color:#0550ae">&#34;schema&#34;</span><span style="color:#1f2328">:</span><span style="color:#0a3069">&#34;go.ymotongpoo.com/pbt/report/v1&#34;</span><span style="color:#1f2328">,</span><span style="color:#0550ae">&#34;test&#34;</span><span style="color:#1f2328">:</span><span style="color:#0a3069">&#34;TestRecordedRun&#34;</span><span style="color:#1f2328">,</span><span style="color:#0550ae">&#34;seed&#34;</span><span style="color:#1f2328">:</span><span style="color:#0a3069">&#34;0x1&#34;</span><span style="color:#1f2328">,</span><span style="color:#0550ae">&#34;kind&#34;</span><span style="color:#1f2328">:</span><span style="color:#0a3069">&#34;check&#34;</span><span style="color:#1f2328">,</span><span style="color:#0550ae">&#34;status&#34;</span><span style="color:#1f2328">:</span><span style="color:#0a3069">&#34;passed&#34;</span><span style="color:#1f2328">,</span><span style="color:#0550ae">&#34;checks_passed&#34;</span><span style="color:#1f2328">:</span><span style="color:#0550ae">3</span><span style="color:#1f2328">,</span><span style="color:#0550ae">&#34;rejected&#34;</span><span style="color:#1f2328">:</span><span style="color:#0550ae">0</span><span style="color:#1f2328">,</span><span style="color:#0550ae">&#34;discards&#34;</span><span style="color:#1f2328">:</span><span style="color:#0550ae">0</span><span style="color:#1f2328">,</span><span style="color:#0550ae">&#34;budget_exhausted&#34;</span><span style="color:#1f2328">:</span><span style="color:#cf222e">false</span><span style="color:#1f2328">}</span>
 </span></span></code></pre><p><code>Observations(dir)</code> か <code>-pbt.observe=dir</code> は、Tycheが読むOpenPBTStatsの記録を追記します。デフォルトの空のディレクトリでは記録しません。pbtはディレクトリを作り、<code>observations/TestRecordedRun.jsonl</code> のように、整えたテスト名ごとに1ファイルを書きます。サブテストの名前はサブディレクトリになります。整えた名前は衝突することがあり、同じファイルに入った記録は <code>property</code> と <code>run_start</code> で区別します。</p>
-<p><code>test_case</code> の記録には、入力、結果、生成の段階、特徴量、所要時間が入ります。特徴量には、ラベル、測定値、カバレッジの要求に当たったかどうか、標的の効用が入ります。所要時間は、入力の生成とテストの実行を分けて記録します。再実行と縮小の試行も記録になります。<code>metadata.final=true</code> の付いた <code>minimal</code> の記録はスナップショットで、もう一度実行したものではありません。実行の最後には <code>info</code> の記録が入ります。<code>coverage</code> のフィールドは、<code>CoverageGuided</code> を使っても今は <code>null</code> です。</p>
-<pre style="background-color:#f7f7f7;-webkit-text-size-adjust:none;"><code><span style="display:flex;"><span>go <span style="color:#6639ba">test</span> -count<span style="color:#0550ae">=</span><span style="color:#0550ae">1</span> ./... -pbt.json<span style="color:#0550ae">=</span>runs.jsonl -pbt.observe<span style="color:#0550ae">=</span>observations
+<p><code>test_case</code> の記録には、入力、結果、生成の段階、特徴量、所要時間が入ります。所要時間は、入力の生成とテストの実行を分けて記録します。再実行と縮小の試行も記録になります。<code>metadata.final=true</code> の付いた <code>minimal</code> の記録はスナップショットで、もう一度実行したものではありません。実行の最後には <code>info</code> の記録が入ります。<code>coverage</code> のフィールドは、<code>CoverageGuided</code> を使っても今は <code>null</code> です。</p>
+<p>記録の特徴量には、そのケースの統計が、Tycheが描く形で入ります。</p>
+<table>
+<thead>
+<tr>
+<th>呼び出し</th>
+<th>特徴量</th>
+<th>値</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Classify(cond, label)</code></td>
+<td><code>label:&lt;label&gt;</code></td>
+<td>そのラベルの呼び出しのどれかで <code>cond</code> が成り立てば <code>&quot;true&quot;</code>、どれでも成り立たなければ <code>&quot;false&quot;</code>。ケースがそのラベルを分類しなければキーがない</td>
+</tr>
+<tr>
+<td><code>Collect(v)</code></td>
+<td><code>collect</code>、続いて <code>collect#2</code>、<code>collect#3</code>、…</td>
+<td>呼び出した順の、各値の <code>%v</code> の文字列</td>
+</tr>
+<tr>
+<td><code>Aggregate(values...)</code></td>
+<td><code>aggregate:&lt;value&gt;</code></td>
+<td>ケースがその値を記録した回数</td>
+</tr>
+<tr>
+<td><code>Measure(name, x)</code></td>
+<td><code>measure:&lt;name&gt;</code></td>
+<td>ケースの最後の標本</td>
+</tr>
+<tr>
+<td><code>Cover(cond, pct, label)</code></td>
+<td><code>cover:&lt;label&gt;</code></td>
+<td>ケースがラベルに当たれば <code>1</code>、当たらなければ <code>0</code></td>
+</tr>
+<tr>
+<td><code>Maximize</code>、<code>Minimize</code></td>
+<td><code>target:&lt;name&gt;</code></td>
+<td>効用。<code>Minimize</code> は符号を反転した値を書く</td>
+</tr>
+</tbody>
+</table>
+<p>有限でない数は、JSONの報告と同じく文字列の <code>NaN</code>、<code>+Inf</code>、<code>-Inf</code> です。Tycheは、値が文字列の特徴量を値ごとの割合として描きます。そうした特徴量がプロパティに2つ以上あると、Tycheは代わりにそのうち2つを掛け合わせたモザイク図を1つ描きます。モザイク図では、特徴量を持たないケースが除かれます。そのため <code>Classify</code> は、ラベルを分類したケースには必ず <code>&quot;true&quot;</code> か <code>&quot;false&quot;</code> を書きます。こうすると、どちらの図にもラベルが付いたケースの割合が出ます。<code>Collect</code> は、PropErが <code>collect</code> について表示する統計と同じく、値ごとの割合をグラフにします。コンソールの統計とJSONの報告は、これまでどおり <code>Collect</code> の呼び出しと、成り立った <code>Classify</code> の呼び出しを文字列ごとにまとめて数えます。</p>
+<p>シードが1のとき、上のリストの3つのケースはどれも <code>n = 0</code> を取り出し、どの記録にも次の特徴量が入ります。<code>n</code> が奇数のケースでは、値が <code>&quot;false&quot;</code> になります。</p>
+<pre style="background-color:#f7f7f7;-webkit-text-size-adjust:none;"><code><span style="display:flex;"><span><span style="color:#1f2328">{</span><span style="color:#0550ae">&#34;label:even&#34;</span><span style="color:#1f2328">:</span><span style="color:#0a3069">&#34;true&#34;</span><span style="color:#1f2328">}</span>
+</span></span></code></pre><pre style="background-color:#f7f7f7;-webkit-text-size-adjust:none;"><code><span style="display:flex;"><span>go <span style="color:#6639ba">test</span> -count<span style="color:#0550ae">=</span><span style="color:#0550ae">1</span> ./... -pbt.json<span style="color:#0550ae">=</span>runs.jsonl -pbt.observe<span style="color:#0550ae">=</span>observations
 </span></span></code></pre><p>ログの転送エージェントでこれらのファイルを読み、記録や集計した件数をログやメトリクスのバックエンドへ送れます。pbtはファイルを手元に書くだけで、ネットワークには送りません。観測記録はバッファーにためて実行の最後に書き出すので、異常終了するとバッファーの中の記録が失われることがあります。書き込みに失敗するとテストは失敗します。求められた出力を届けられなかったからです。</p>
+<h2 id="tycheで観測記録を見る">Tycheで観測記録を見る</h2>
+<p><a href="https://github.com/tyche-pbt/tyche-extension">Tyche</a> は、これらの記録を描くVS Codeの拡張機能です。ケースの結果、重複した入力、特徴量のグラフ、所要時間を表示します。Tycheは、設定の <code>tyche.observationGlobs</code> でファイルを探します。デフォルトの値は、HypothesisとQuickCheckのディレクトリである <code>**/.hypothesis/observed/*.jsonl</code> と <code>**/.quickcheck/observations/*.jsonl</code> だけです。ワークスペースの <code>.vscode/settings.json</code> に、<code>-pbt.observe</code> に渡すディレクトリのglobを足してください。この設定はデフォルトの値を置き換えます。ディレクトリの後ろの <code>**</code> は、サブテストのサブディレクトリにも一致します。</p>
+<pre style="background-color:#f7f7f7;-webkit-text-size-adjust:none;"><code><span style="display:flex;"><span><span style="color:#1f2328">{</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#0550ae">&#34;tyche.observationGlobs&#34;</span><span style="color:#1f2328">:</span> <span style="color:#1f2328">[</span><span style="color:#0a3069">&#34;**/observations/**/*.jsonl&#34;</span><span style="color:#1f2328">]</span>
+</span></span><span style="display:flex;"><span><span style="color:#1f2328">}</span>
+</span></span></code></pre><p>Tycheが自分から起動するのはPythonやHaskellなどの言語だけで、Goでは起動しません。実行の後でコマンドパレットを開き、<strong>Tyche: Refresh Live View</strong> を実行してください。このコマンドはTycheを起動し、globに一致するファイルをすべて読み込みます。その後のTycheはファイルを監視し、後の実行で変わったファイルから表示を描き直します。実行で新しいファイルができたときは、もう一度コマンドを実行してください。</p>
+<p>pbtは実行をまたいでファイルに追記します。Tycheはプロパティごとに最新の実行、つまり <code>run_start</code> が最も大きい記録だけを表示します。そのため、古い実行の記録がファイルに残っていても表示は変わりません。</p>
 
 <div class="pager">
 <span>← <a href="03-shrinking">縮小</a></span>
 <span><a href="05-stateful">ステートフルテスト</a> →</span>
 </div>
-<footer>pbt 利用ガイド for pbt v0.5.2 · <a href="https://github.com/ymotongpoo/pbt/tree/main/docs/guide">source</a> · Apache License 2.0</footer>
+<footer>pbt 利用ガイド for pbt v0.5.3 · <a href="https://github.com/ymotongpoo/pbt/tree/main/docs/guide">source</a> · Apache License 2.0</footer>
 </main>
 </div>
 </body>

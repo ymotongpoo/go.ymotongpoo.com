@@ -52,7 +52,7 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 <div class="layout">
 <nav class="side">
 <h1><a href="./">pbt user guide</a></h1>
-<div class="version">pbt v0.5.2</div>
+<div class="version">pbt v0.5.3</div>
 <ol>
 <li><a href="./">Getting started</a></li>
 <li><a href="01-generators">Generators</a></li>
@@ -432,15 +432,67 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 </span></span></span></code></pre><p><code>TestMachineReadableOutput</code> checks both files. This is its JSON report with durations, statistics and empty collections omitted; all shown fields retain their captured values:</p>
 <pre style="background-color:#f7f7f7;-webkit-text-size-adjust:none;"><code><span style="display:flex;"><span><span style="color:#1f2328">{</span><span style="color:#0550ae">&#34;schema&#34;</span><span style="color:#1f2328">:</span><span style="color:#0a3069">&#34;go.ymotongpoo.com/pbt/report/v1&#34;</span><span style="color:#1f2328">,</span><span style="color:#0550ae">&#34;test&#34;</span><span style="color:#1f2328">:</span><span style="color:#0a3069">&#34;TestRecordedRun&#34;</span><span style="color:#1f2328">,</span><span style="color:#0550ae">&#34;seed&#34;</span><span style="color:#1f2328">:</span><span style="color:#0a3069">&#34;0x1&#34;</span><span style="color:#1f2328">,</span><span style="color:#0550ae">&#34;kind&#34;</span><span style="color:#1f2328">:</span><span style="color:#0a3069">&#34;check&#34;</span><span style="color:#1f2328">,</span><span style="color:#0550ae">&#34;status&#34;</span><span style="color:#1f2328">:</span><span style="color:#0a3069">&#34;passed&#34;</span><span style="color:#1f2328">,</span><span style="color:#0550ae">&#34;checks_passed&#34;</span><span style="color:#1f2328">:</span><span style="color:#0550ae">3</span><span style="color:#1f2328">,</span><span style="color:#0550ae">&#34;rejected&#34;</span><span style="color:#1f2328">:</span><span style="color:#0550ae">0</span><span style="color:#1f2328">,</span><span style="color:#0550ae">&#34;discards&#34;</span><span style="color:#1f2328">:</span><span style="color:#0550ae">0</span><span style="color:#1f2328">,</span><span style="color:#0550ae">&#34;budget_exhausted&#34;</span><span style="color:#1f2328">:</span><span style="color:#cf222e">false</span><span style="color:#1f2328">}</span>
 </span></span></code></pre><p><code>Observations(dir)</code> or <code>-pbt.observe=dir</code> appends OpenPBTStats records that Tyche reads. The default empty directory disables observations. pbt creates the directory and writes one file per sanitized test name, such as <code>observations/TestRecordedRun.jsonl</code>. Subtest names create subdirectories. Sanitized names can collide; <code>property</code> and <code>run_start</code> distinguish records in a shared file.</p>
-<p>Each <code>test_case</code> record includes the input, outcome, generation phase, features and timings. Features include labels, measurements, coverage-requirement hits and target utilities. Timings separate input generation from test execution. Replay and shrink attempts also produce records. A <code>minimal</code> record with <code>metadata.final=true</code> is a snapshot, not another execution. An <code>info</code> record ends the run. The <code>coverage</code> field is currently null, even with <code>CoverageGuided</code>.</p>
-<pre style="background-color:#f7f7f7;-webkit-text-size-adjust:none;"><code><span style="display:flex;"><span>go <span style="color:#6639ba">test</span> -count<span style="color:#0550ae">=</span><span style="color:#0550ae">1</span> ./... -pbt.json<span style="color:#0550ae">=</span>runs.jsonl -pbt.observe<span style="color:#0550ae">=</span>observations
+<p>Each <code>test_case</code> record includes the input, outcome, generation phase, features and timings. Timings separate input generation from test execution. Replay and shrink attempts also produce records. A <code>minimal</code> record with <code>metadata.final=true</code> is a snapshot, not another execution. An <code>info</code> record ends the run. The <code>coverage</code> field is currently null, even with <code>CoverageGuided</code>.</p>
+<p>The features of a record hold the statistics of its case, in the form that Tyche draws:</p>
+<table>
+<thead>
+<tr>
+<th>Call</th>
+<th>Feature</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Classify(cond, label)</code></td>
+<td><code>label:&lt;label&gt;</code></td>
+<td><code>&quot;true&quot;</code> if <code>cond</code> held in a call with the label, <code>&quot;false&quot;</code> if it held in none; absent if the case did not classify the label</td>
+</tr>
+<tr>
+<td><code>Collect(v)</code></td>
+<td><code>collect</code>, then <code>collect#2</code>, <code>collect#3</code>, …</td>
+<td>the <code>%v</code> text of each value, in call order</td>
+</tr>
+<tr>
+<td><code>Aggregate(values...)</code></td>
+<td><code>aggregate:&lt;value&gt;</code></td>
+<td>the number of times that the case recorded the value</td>
+</tr>
+<tr>
+<td><code>Measure(name, x)</code></td>
+<td><code>measure:&lt;name&gt;</code></td>
+<td>the last sample of the case</td>
+</tr>
+<tr>
+<td><code>Cover(cond, pct, label)</code></td>
+<td><code>cover:&lt;label&gt;</code></td>
+<td><code>1</code> if the case hit the label, <code>0</code> otherwise</td>
+</tr>
+<tr>
+<td><code>Maximize</code>, <code>Minimize</code></td>
+<td><code>target:&lt;name&gt;</code></td>
+<td>the utility; <code>Minimize</code> writes its negation</td>
+</tr>
+</tbody>
+</table>
+<p>Non-finite numbers are the strings <code>NaN</code>, <code>+Inf</code> and <code>-Inf</code>, as in the JSON report. Tyche draws a feature with string values as the share of each value. When a property has two or more such features, Tyche draws one mosaic chart that crosses two of them instead, and the chart leaves out the cases that lack a feature. <code>Classify</code> therefore writes <code>&quot;true&quot;</code> or <code>&quot;false&quot;</code> in every case that classifies the label, so both charts show the share of the cases with the label. <code>Collect</code> gives a chart with the share of each value, like the statistics that PropEr prints for <code>collect</code>. The console statistics and the JSON report still count the <code>Collect</code> calls and the <code>Classify</code> calls that held together, by text.</p>
+<p>With seed 1, the three cases of the listing above all draw <code>n = 0</code>, and each record carries these features. A case with an odd <code>n</code> carries <code>&quot;false&quot;</code> instead:</p>
+<pre style="background-color:#f7f7f7;-webkit-text-size-adjust:none;"><code><span style="display:flex;"><span><span style="color:#1f2328">{</span><span style="color:#0550ae">&#34;label:even&#34;</span><span style="color:#1f2328">:</span><span style="color:#0a3069">&#34;true&#34;</span><span style="color:#1f2328">}</span>
+</span></span></code></pre><pre style="background-color:#f7f7f7;-webkit-text-size-adjust:none;"><code><span style="display:flex;"><span>go <span style="color:#6639ba">test</span> -count<span style="color:#0550ae">=</span><span style="color:#0550ae">1</span> ./... -pbt.json<span style="color:#0550ae">=</span>runs.jsonl -pbt.observe<span style="color:#0550ae">=</span>observations
 </span></span></code></pre><p>A log shipper can tail these files and forward records or derived counts to a log or metrics backend. pbt writes files locally and does not send them over the network. Observations use buffering and flush at the end of a run; abrupt termination can lose buffered records. A write error fails the test, because the requested output was not delivered.</p>
+<h2 id="viewing-observations-in-tyche">Viewing observations in Tyche</h2>
+<p><a href="https://github.com/tyche-pbt/tyche-extension">Tyche</a> is a VS Code extension that draws these records: the outcomes of the cases, duplicate inputs, charts of the features and the timings. It finds the files through its setting <code>tyche.observationGlobs</code>. The defaults cover only the directories of Hypothesis and QuickCheck, <code>**/.hypothesis/observed/*.jsonl</code> and <code>**/.quickcheck/observations/*.jsonl</code>. Add a glob for the directory that you pass to <code>-pbt.observe</code> to the workspace's <code>.vscode/settings.json</code>. The setting replaces the defaults, and the <code>**</code> after the directory also matches the subdirectories of subtests:</p>
+<pre style="background-color:#f7f7f7;-webkit-text-size-adjust:none;"><code><span style="display:flex;"><span><span style="color:#1f2328">{</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#0550ae">&#34;tyche.observationGlobs&#34;</span><span style="color:#1f2328">:</span> <span style="color:#1f2328">[</span><span style="color:#0a3069">&#34;**/observations/**/*.jsonl&#34;</span><span style="color:#1f2328">]</span>
+</span></span><span style="display:flex;"><span><span style="color:#1f2328">}</span>
+</span></span></code></pre><p>Tyche starts by itself only for languages such as Python and Haskell, not for Go. After a run, open the command palette and run <strong>Tyche: Refresh Live View</strong>. The command starts Tyche and loads every file that matches the globs. Tyche then watches the files and redraws the view from the files that a later run changes. Run the command again when a run creates a new file.</p>
+<p>pbt appends to the files across runs. Tyche shows only the latest run of each property, the records with the greatest <code>run_start</code>, so the older runs in the files do not change the view.</p>
 
 <div class="pager">
 <span>← <a href="03-shrinking">Shrinking</a></span>
 <span><a href="05-stateful">Stateful testing</a> →</span>
 </div>
-<footer>pbt user guide for pbt v0.5.2 · <a href="https://github.com/ymotongpoo/pbt/tree/main/docs/guide">source</a> · Apache License 2.0</footer>
+<footer>pbt user guide for pbt v0.5.3 · <a href="https://github.com/ymotongpoo/pbt/tree/main/docs/guide">source</a> · Apache License 2.0</footer>
 </main>
 </div>
 </body>
