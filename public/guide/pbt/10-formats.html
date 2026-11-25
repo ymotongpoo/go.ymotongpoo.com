@@ -52,7 +52,7 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 <div class="layout">
 <nav class="side">
 <h1><a href="./">pbt user guide</a></h1>
-<div class="version">pbt v0.5.0</div>
+<div class="version">pbt v0.5.1</div>
 <ol>
 <li><a href="./">Getting started</a></li>
 <li><a href="01-generators">Generators</a></li>
@@ -159,7 +159,7 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 </span></span><span style="display:flex;"><span>[pbt] s (RFC3339()) = &#34;1970-01-01T00:00:00z&#34;
 </span></span><span style="display:flex;"><span>[pbt] error: time.Parse rejects 1970-01-01T00:00:00z: parsing time &#34;1970-01-01T00:00:00z&#34; as &#34;2006-01-02T15:04:05Z07:00&#34;: cannot parse &#34;z&#34; as &#34;Z07:00&#34;
 </span></span><span style="display:flex;"><span>[pbt] reproduce: go test -run &#39;TestRFC3339&#39; -pbt.seed=0x1
-</span></span></code></pre><p>RFC 3339 allows a lower-case <code>z</code> and <code>t</code>, and <code>time.Parse</code> rejects them, as it rejects the leap second <code>23:59:60</code>. Whether that matters depends on where your timestamps come from. The property makes the decision visible, and the shrunk case shows the difference in one character. The documentation of each generator lists the differences between the standard and the parsers of Go's standard library, as measured on Go 1.26. The tests of the package pin them.</p>
+</span></span></code></pre><p>RFC 3339 allows a lower-case <code>z</code> and <code>t</code>, and <code>time.Parse</code> rejects them, as it rejects the leap second <code>23:59:60</code>. Whether that matters depends on where your timestamps come from. The property makes the decision visible, and the shrunk case shows the difference in one character. The documentation of each generator lists the differences between the standard and the parsers of Go's standard library, as measured on Go 1.26, and names the releases where a difference changed: <code>url.Parse</code> accepts IPvFuture literals such as <code>http://[v1.x]/</code> up to Go 1.25.1 and rejects them from Go 1.25.2. The tests of the package pin the differences on every supported version of Go.</p>
 <h2 id="testing-what-a-program-writes">Testing what a program writes</h2>
 <p>For the input of a program, the plain names give values that every reasonable consumer accepts. A sign-up form can store <code>format.Email()</code> and expect <code>net/mail</code> to read the same address back.</p>
 <pre style="background-color:#f7f7f7;-webkit-text-size-adjust:none;"><code><span style="display:flex;"><span><span style="color:#57606a">// A sign-up form stores the address it receives, and the confirmation mail</span><span style="color:#fff">
@@ -212,7 +212,7 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 <span>← <a href="09-types">Generators from types</a></span>
 <span><a href="11-reference">Where to go next</a> →</span>
 </div>
-<footer>pbt user guide for pbt v0.5.0 · <a href="https://github.com/ymotongpoo/pbt/tree/main/docs/guide">source</a> · Apache License 2.0</footer>
+<footer>pbt user guide for pbt v0.5.1 · <a href="https://github.com/ymotongpoo/pbt/tree/main/docs/guide">source</a> · Apache License 2.0</footer>
 </main>
 </div>
 </body>

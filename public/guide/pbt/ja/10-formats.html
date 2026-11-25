@@ -52,7 +52,7 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 <div class="layout">
 <nav class="side">
 <h1><a href="./">pbt 利用ガイド</a></h1>
-<div class="version">pbt v0.5.0</div>
+<div class="version">pbt v0.5.1</div>
 <ol>
 <li><a href="./">はじめに</a></li>
 <li><a href="01-generators">生成器</a></li>
@@ -159,7 +159,7 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 </span></span><span style="display:flex;"><span>[pbt] s (RFC3339()) = &#34;1970-01-01T00:00:00z&#34;
 </span></span><span style="display:flex;"><span>[pbt] error: time.Parse rejects 1970-01-01T00:00:00z: parsing time &#34;1970-01-01T00:00:00z&#34; as &#34;2006-01-02T15:04:05Z07:00&#34;: cannot parse &#34;z&#34; as &#34;Z07:00&#34;
 </span></span><span style="display:flex;"><span>[pbt] reproduce: go test -run &#39;TestRFC3339&#39; -pbt.seed=0x1
-</span></span></code></pre><p>RFC 3339は小文字の <code>z</code> と <code>t</code> を許しますが、<code>time.Parse</code> はそれらを受理しません。閏秒の <code>23:59:60</code> も同じく受理しません。それが問題になるかどうかは、タイムスタンプの出どころによります。このプロパティで判断すべき点が明らかになり、縮小したケースはその違いを1文字で示します。各生成器のドキュメントには、Go 1.26で確かめた、規格とGoの標準ライブラリのパーサーとの違いが載っています。パッケージのテストが、それらの違いを検査しています。</p>
+</span></span></code></pre><p>RFC 3339は小文字の <code>z</code> と <code>t</code> を許しますが、<code>time.Parse</code> はそれらを受理しません。閏秒の <code>23:59:60</code> も同じく受理しません。それが問題になるかどうかは、タイムスタンプの出どころによります。このプロパティで判断すべき点が明らかになり、縮小したケースはその違いを1文字で示します。各生成器のドキュメントには、Go 1.26で確かめた、規格とGoの標準ライブラリのパーサーとの違いが載っています。違いがGoのリリースで変わったものは、その版も書いてあります。例えば <code>url.Parse</code> は、<code>http://[v1.x]/</code> のようなIPvFutureのリテラルを、Go 1.25.1までは受け付け、Go 1.25.2からは拒否します。パッケージのテストは、対応するすべてのGoの版でそれらの違いを検査しています。</p>
 <h2 id="プログラムが書き出すものをテストする">プログラムが書き出すものをテストする</h2>
 <p>プログラムへの入力には、規格の名前を含まない関数を使います。その値は、一般的な受け手ならどれでも受理します。登録フォームは <code>format.Email()</code> の値を保存し、<code>net/mail</code> が同じアドレスを読み戻すことを期待できます。</p>
 <pre style="background-color:#f7f7f7;-webkit-text-size-adjust:none;"><code><span style="display:flex;"><span><span style="color:#57606a">// A sign-up form stores the address it receives, and the confirmation mail</span><span style="color:#fff">
@@ -212,7 +212,7 @@ footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
 <span>← <a href="09-types">型から導く生成器</a></span>
 <span><a href="11-reference">次に読むもの</a> →</span>
 </div>
-<footer>pbt 利用ガイド for pbt v0.5.0 · <a href="https://github.com/ymotongpoo/pbt/tree/main/docs/guide">source</a> · Apache License 2.0</footer>
+<footer>pbt 利用ガイド for pbt v0.5.1 · <a href="https://github.com/ymotongpoo/pbt/tree/main/docs/guide">source</a> · Apache License 2.0</footer>
 </main>
 </div>
 </body>

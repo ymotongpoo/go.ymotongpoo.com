@@ -1,4 +1,4 @@
-# pbt user guide (v0.5.0)
+# pbt user guide (v0.5.1)
 
 > The user guide of pbt, a property-based testing library for Go, in one file. The index of the documentation is https://go.ymotongpoo.com/pbt/guide/llms.txt.
 
@@ -8,12 +8,12 @@
 
 pbt is a property-based testing library for Go. A property is a test that must hold for every input of some shape. pbt generates the inputs, shrinks a failing one to a small case, and saves that case so that the next `go test` run replays it. The feature set follows Erlang's [PropEr](https://proper-testing.github.io/): generators whose distribution you control, statistics to check that control, stateful and parallel command testing, state machines, targeted search, and existential properties.
 
-This guide describes pbt v0.5.0. It assumes that you write tests with `go test`. The [package documentation](https://pkg.go.dev/go.ymotongpoo.com/pbt) is the reference for every function; the chapters here explain how the pieces fit together and which one to reach for.
+This guide describes pbt v0.5.1. It assumes that you write tests with `go test`. The [package documentation](https://pkg.go.dev/go.ymotongpoo.com/pbt) is the reference for every function; the chapters here explain how the pieces fit together and which one to reach for.
 
 ## Install
 
 ```sh
-go get go.ymotongpoo.com/pbt@v0.5.0
+go get go.ymotongpoo.com/pbt@v0.5.1
 ```
 
 pbt needs Go 1.25 or later and has no dependencies outside the standard library. Import it as `go.ymotongpoo.com/pbt`.
@@ -1810,7 +1810,7 @@ var rfc3339Property = func(t *pbt.T) {
 [pbt] reproduce: go test -run 'TestRFC3339' -pbt.seed=0x1
 ```
 
-RFC 3339 allows a lower-case `z` and `t`, and `time.Parse` rejects them, as it rejects the leap second `23:59:60`. Whether that matters depends on where your timestamps come from. The property makes the decision visible, and the shrunk case shows the difference in one character. The documentation of each generator lists the differences between the standard and the parsers of Go's standard library, as measured on Go 1.26. The tests of the package pin them.
+RFC 3339 allows a lower-case `z` and `t`, and `time.Parse` rejects them, as it rejects the leap second `23:59:60`. Whether that matters depends on where your timestamps come from. The property makes the decision visible, and the shrunk case shows the difference in one character. The documentation of each generator lists the differences between the standard and the parsers of Go's standard library, as measured on Go 1.26, and names the releases where a difference changed: `url.Parse` accepts IPvFuture literals such as `http://[v1.x]/` up to Go 1.25.1 and rejects them from Go 1.25.2. The tests of the package pin the differences on every supported version of Go.
 
 ## Testing what a program writes
 
